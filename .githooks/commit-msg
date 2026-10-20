@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Validates the one-line Conventional Commit format (see CONTRIBUTING.md).
+set -euo pipefail
+
+msg_file=${1:?usage: commit-msg <message-file>}
+
+# Drop comment lines git adds, then trailing blank lines.
+content=$(grep -v '^#' "$msg_file" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')
+
+if [ -z "$content" ]; then
+	echo "commit-msg: empty message" >&2
+	exit 1
+fi
+
+if [ "$(printf '%s\n' "$content" | wc -l)" -gt 1 ]; then
+	echo "commit-msg: only a single subject line is allowed (no body, footer or trailers)" >&2
+	exit 1
+fi
+
+if [ "${#content}" -gt 72 ]; then
+	echo "commit-msg: subject is ${#content} characters, the limit is 72" >&2
+	exit 1
+fi
+
+re='^(feat|fix|perf|refactor|test|docs|build|ci|chore)(\([a-z0-9-]+\))?!?: [a-z0-9].{0,70}[^.]$'
+if ! [[ $content =~ $re ]]; then
+	echo "commit-msg: subject must match <type>(<scope>): <summary>" >&2
+	echo "  types: feat fix perf refactor test docs build ci chore" >&2
+	echo "  summary: imperative, lowercase first letter, no trailing period" >&2
+	echo "  got: $content" >&2
+	exit 1
+fi

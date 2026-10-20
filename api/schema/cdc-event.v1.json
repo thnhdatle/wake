@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thnhdatle/wake/api/schema/cdc-event.v1.json",
+  "title": "Wake CDC event v1",
+  "description": "Data event of the Wake CDC event contract v1 (docs/guides/consuming-events.md). Integer columns are JSON numbers and int8 values may exceed 2^53: decode them exactly.",
+  "type": "object",
+  "required": ["id", "source", "op", "ts_ms", "lsn", "key", "before", "after", "schema_version"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9A-F]+/[0-9A-F]+-(?:[0-9]+|r[0-9]+-[0-9]+|s[0-9]+)$"},
+    "source": {
+      "type": "object",
+      "required": ["db", "schema", "table"],
+      "additionalProperties": false,
+      "properties": {
+        "db": {"type": "string"},
+        "schema": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+        "table": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"}
+      }
+    },
+    "op": {"enum": ["c", "u", "d", "r", "t"]},
+    "ts_ms": {"type": "integer", "minimum": 0},
+    "lsn": {"type": "string", "pattern": "^[0-9A-F]+/[0-9A-F]+$"},
+    "tx_id": {"type": "integer", "minimum": 0},
+    "key": {"type": ["object", "null"]},
+    "before": {"type": ["object", "null"]},
+    "after": {"type": ["object", "null"]},
+    "unchanged_columns": {"type": "array", "items": {"type": "string"}},
+    "schema_version": {"type": "integer", "minimum": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"op": {"const": "c"}}}, "then": {"properties": {"before": {"type": "null"}, "after": {"type": "object"}}}},
+    {"if": {"properties": {"op": {"const": "r"}}}, "then": {"properties": {"before": {"type": "null"}, "after": {"type": "object"}}}},
+    {"if": {"properties": {"op": {"const": "u"}}}, "then": {"properties": {"after": {"type": "object"}}}},
+    {"if": {"properties": {"op": {"const": "d"}}}, "then": {"properties": {"after": {"type": "null"}}}}
+  ]
+}

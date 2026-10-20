@@ -1,0 +1,166 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package schema
+
+// FirstNormalObjectID is the first OID Postgres assigns to user-created
+// objects (FirstNormalObjectId). Types at or above it (enums, domains,
+// composites, extension types such as citext) are not in the mapping table
+// and are emitted as their text representation.
+const FirstNormalObjectID uint32 = 16384
+
+// OIDs of the built-in types in the mapping table: scalars, ranges,
+// multiranges and arrays (pg_type.dat; stable across Postgres versions).
+const (
+	OIDBool           uint32 = 16
+	OIDBytea          uint32 = 17
+	OIDChar           uint32 = 18
+	OIDName           uint32 = 19
+	OIDInt8           uint32 = 20
+	OIDInt2           uint32 = 21
+	OIDInt2Vector     uint32 = 22
+	OIDInt4           uint32 = 23
+	OIDRegProc        uint32 = 24
+	OIDText           uint32 = 25
+	OIDOID            uint32 = 26
+	OIDTID            uint32 = 27
+	OIDXID            uint32 = 28
+	OIDCID            uint32 = 29
+	OIDOIDVector      uint32 = 30
+	OIDJSON           uint32 = 114
+	OIDXML            uint32 = 142
+	OIDPoint          uint32 = 600
+	OIDLseg           uint32 = 601
+	OIDPath           uint32 = 602
+	OIDBox            uint32 = 603
+	OIDPolygon        uint32 = 604
+	OIDLine           uint32 = 628
+	OIDCIDR           uint32 = 650
+	OIDFloat4         uint32 = 700
+	OIDFloat8         uint32 = 701
+	OIDCircle         uint32 = 718
+	OIDMacaddr8       uint32 = 774
+	OIDMoney          uint32 = 790
+	OIDMacaddr        uint32 = 829
+	OIDInet           uint32 = 869
+	OIDACLItem        uint32 = 1033
+	OIDBPChar         uint32 = 1042
+	OIDVarchar        uint32 = 1043
+	OIDDate           uint32 = 1082
+	OIDTime           uint32 = 1083
+	OIDTimestamp      uint32 = 1114
+	OIDTimestampTZ    uint32 = 1184
+	OIDInterval       uint32 = 1186
+	OIDTimeTZ         uint32 = 1266
+	OIDBit            uint32 = 1560
+	OIDVarbit         uint32 = 1562
+	OIDNumeric        uint32 = 1700
+	OIDRefcursor      uint32 = 1790
+	OIDRegProcedure   uint32 = 2202
+	OIDRegOper        uint32 = 2203
+	OIDRegOperator    uint32 = 2204
+	OIDRegClass       uint32 = 2205
+	OIDRegType        uint32 = 2206
+	OIDUUID           uint32 = 2950
+	OIDTxidSnapshot   uint32 = 2970
+	OIDPgLSN          uint32 = 3220
+	OIDTSVector       uint32 = 3614
+	OIDTSQuery        uint32 = 3615
+	OIDRegConfig      uint32 = 3734
+	OIDRegDictionary  uint32 = 3769
+	OIDJSONB          uint32 = 3802
+	OIDInt4Range      uint32 = 3904
+	OIDNumRange       uint32 = 3906
+	OIDTSRange        uint32 = 3908
+	OIDTSTZRange      uint32 = 3910
+	OIDDateRange      uint32 = 3912
+	OIDInt8Range      uint32 = 3926
+	OIDJSONPath       uint32 = 4072
+	OIDRegNamespace   uint32 = 4089
+	OIDRegRole        uint32 = 4096
+	OIDRegCollation   uint32 = 4191
+	OIDInt4Multirange uint32 = 4451
+	OIDNumMultirange  uint32 = 4532
+	OIDTSMultirange   uint32 = 4533
+	OIDTSTZMultirange uint32 = 4534
+	OIDDateMultirange uint32 = 4535
+	OIDInt8Multirange uint32 = 4536
+	OIDPgSnapshot     uint32 = 5038
+	OIDXID8           uint32 = 5069
+
+	// Built-in array types (pg_type.typarray of the types above).
+	OIDBoolArray           uint32 = 1000
+	OIDByteaArray          uint32 = 1001
+	OIDCharArray           uint32 = 1002
+	OIDNameArray           uint32 = 1003
+	OIDInt2Array           uint32 = 1005
+	OIDInt2VectorArray     uint32 = 1006
+	OIDInt4Array           uint32 = 1007
+	OIDRegProcArray        uint32 = 1008
+	OIDTextArray           uint32 = 1009
+	OIDTIDArray            uint32 = 1010
+	OIDXIDArray            uint32 = 1011
+	OIDCIDArray            uint32 = 1012
+	OIDOIDVectorArray      uint32 = 1013
+	OIDBPCharArray         uint32 = 1014
+	OIDVarcharArray        uint32 = 1015
+	OIDInt8Array           uint32 = 1016
+	OIDPointArray          uint32 = 1017
+	OIDLsegArray           uint32 = 1018
+	OIDPathArray           uint32 = 1019
+	OIDBoxArray            uint32 = 1020
+	OIDFloat4Array         uint32 = 1021
+	OIDFloat8Array         uint32 = 1022
+	OIDPolygonArray        uint32 = 1027
+	OIDOIDArray            uint32 = 1028
+	OIDACLItemArray        uint32 = 1034
+	OIDMacaddrArray        uint32 = 1040
+	OIDInetArray           uint32 = 1041
+	OIDTimestampArray      uint32 = 1115
+	OIDDateArray           uint32 = 1182
+	OIDTimeArray           uint32 = 1183
+	OIDTimestampTZArray    uint32 = 1185
+	OIDIntervalArray       uint32 = 1187
+	OIDNumericArray        uint32 = 1231
+	OIDTimeTZArray         uint32 = 1270
+	OIDBitArray            uint32 = 1561
+	OIDVarbitArray         uint32 = 1563
+	OIDRefcursorArray      uint32 = 2201
+	OIDRegProcedureArray   uint32 = 2207
+	OIDRegOperArray        uint32 = 2208
+	OIDRegOperatorArray    uint32 = 2209
+	OIDRegClassArray       uint32 = 2210
+	OIDRegTypeArray        uint32 = 2211
+	OIDTxidSnapshotArray   uint32 = 2949
+	OIDUUIDArray           uint32 = 2951
+	OIDPgLSNArray          uint32 = 3221
+	OIDTSVectorArray       uint32 = 3643
+	OIDTSQueryArray        uint32 = 3645
+	OIDRegConfigArray      uint32 = 3735
+	OIDRegDictionaryArray  uint32 = 3770
+	OIDJSONBArray          uint32 = 3807
+	OIDInt4RangeArray      uint32 = 3905
+	OIDNumRangeArray       uint32 = 3907
+	OIDTSRangeArray        uint32 = 3909
+	OIDTSTZRangeArray      uint32 = 3911
+	OIDDateRangeArray      uint32 = 3913
+	OIDInt8RangeArray      uint32 = 3927
+	OIDJSONPathArray       uint32 = 4073
+	OIDRegNamespaceArray   uint32 = 4090
+	OIDRegRoleArray        uint32 = 4097
+	OIDRegCollationArray   uint32 = 4192
+	OIDPgSnapshotArray     uint32 = 5039
+	OIDInt4MultirangeArray uint32 = 6150
+	OIDNumMultirangeArray  uint32 = 6151
+	OIDTSMultirangeArray   uint32 = 6152
+	OIDTSTZMultirangeArray uint32 = 6153
+	OIDDateMultirangeArray uint32 = 6155
+	OIDInt8MultirangeArray uint32 = 6157
+	OIDXID8Array           uint32 = 271
+	OIDJSONArray           uint32 = 199
+	OIDXMLArray            uint32 = 143
+	OIDLineArray           uint32 = 629
+	OIDCIDRArray           uint32 = 651
+	OIDCircleArray         uint32 = 719
+	OIDMacaddr8Array       uint32 = 775
+	OIDMoneyArray          uint32 = 791
+)

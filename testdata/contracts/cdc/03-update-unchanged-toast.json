@@ -1,0 +1,1 @@
+{"id":"0/16B3900-1","source":{"db":"app","schema":"public","table":"docs"},"op":"u","ts_ms":1760600002000,"lsn":"0/16B3900","tx_id":7814,"key":{"id":7},"before":{"id":7},"after":{"id":7,"title":"new"},"unchanged_columns":["body"],"schema_version":1}

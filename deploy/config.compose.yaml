@@ -1,0 +1,20 @@
+# Wake configuration for deploy/docker-compose.yml: the README quickstart.
+# See config.example.yaml for every key. The DSN comes from WAKE_SOURCE_DSN.
+source:
+  name: app
+  dsn_env: WAKE_SOURCE_DSN
+tables:
+  include: ["public.*"]
+state:
+  path: /var/lib/wake/wake-state.json
+stream:
+  spill_dir: /var/lib/wake/spill
+sinks:
+  - name: kafka-main
+    type: kafka
+    kafka:
+      brokers: ["kafka:29092"]
+      topic_prefix: cdc
+      auto_create_topics: true
+admin:
+  listen: 0.0.0.0:9093

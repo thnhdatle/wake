@@ -1,0 +1,74 @@
+version: 2
+
+project_name: wake
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: wake
+    main: ./cmd/wake
+    binary: wake
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/thnhdatle/wake/internal/platform/buildinfo.Version={{ .Version }}
+      - -X github.com/thnhdatle/wake/internal/platform/buildinfo.Commit={{ .ShortCommit }}
+      - -X github.com/thnhdatle/wake/internal/platform/buildinfo.Date={{ .Date }}
+
+archives:
+  - id: wake
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - id: archives
+    artifacts: archive
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+    documents:
+      - "${artifact}.sbom.spdx.json"
+
+dockers_v2:
+  - id: wake
+    ids: [wake]
+    images:
+      - ghcr.io/thnhdatle/wake
+    tags:
+      - "v{{ .Version }}"
+      - "{{ .Major }}.{{ .Minor }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    dockerfile: Dockerfile.release
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    sbom: true
+    labels:
+      org.opencontainers.image.source: https://github.com/thnhdatle/wake
+      org.opencontainers.image.licenses: Apache-2.0
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: thnhdatle
+    name: wake
+  draft: false
+  prerelease: auto

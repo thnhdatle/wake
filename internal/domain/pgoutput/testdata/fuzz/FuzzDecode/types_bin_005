@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("I\x00\x00N!N\x00.t\x00\x00\x00\x013t\x00\x00\x00\nnot-an-intnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn")

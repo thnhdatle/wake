@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"id\":\"0/A-1\",\"source\":{\"db\":\"d\",\"schema\":\"s\",\"table\":\"t\"},\"op\":\"x\",\"ts_ms\":1,\"lsn\":\"0/A\",\"key\":null,\"before\":null,\"after\":null,\"schema_version\":1}")

@@ -1,0 +1,7 @@
+{"begin":{"final_lsn":"0/2000","ts_ms":1792308604187,"xid":900}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1},{"key":false,"name":"title","oid":25,"type":"text","typmod":-1},{"key":false,"name":"body","oid":25,"type":"text","typmod":-1}],"identity":"d","key_columns":["id"],"keyless":false,"oid":20010,"schema_version":1,"table":"syn.docs","unknown_types":null}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1},{"key":true,"name":"title","oid":25,"type":"text","typmod":-1},{"key":true,"name":"body","oid":25,"type":"text","typmod":-1}],"identity":"f","key_columns":["id"],"keyless":false,"oid":20011,"schema_version":1,"table":"syn.full_pk","unknown_types":null}}
+{"id":"0/2000-0","source":{"db":"app","schema":"syn","table":"docs"},"op":"u","ts_ms":1792308604187,"lsn":"0/2000","tx_id":900,"key":{"id":1},"before":{"id":1},"after":{"id":1,"title":"b"},"unchanged_columns":["body"],"schema_version":1}
+{"id":"0/2000-1","source":{"db":"app","schema":"syn","table":"docs"},"op":"u","ts_ms":1792308604187,"lsn":"0/2000","tx_id":900,"key":{"id":2},"before":{"id":1},"after":{"id":2},"unchanged_columns":["title","body"],"schema_version":1}
+{"id":"0/2000-2","source":{"db":"app","schema":"syn","table":"full_pk"},"op":"u","ts_ms":1792308604187,"lsn":"0/2000","tx_id":900,"key":{"id":1},"before":{"id":1,"title":"a","body":"long body"},"after":{"id":1,"title":"b","body":"long body"},"schema_version":1}
+{"commit":{"commit_lsn":"0/2000","end_lsn":"0/2030","flags":0,"ts_ms":1792308604187}}

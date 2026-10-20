@@ -1,0 +1,163 @@
+# golangci-lint v2 configuration. Pinned version: v2.14.0 (the same version runs in CI).
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+    - acceptance
+    - bench
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosec
+    - revive
+    - gocritic
+    - errorlint
+    - wrapcheck
+    - bodyclose
+    - noctx
+    - contextcheck
+    - containedctx
+    - sqlclosecheck
+    - rowserrcheck
+    - nilerr
+    - nilnil
+    - exhaustive
+    - forcetypeassert
+    - misspell
+    - unparam
+    - unconvert
+    - prealloc
+    - predeclared
+    - funlen
+    - gocyclo
+    - gocognit
+    - nestif
+    - lll
+    - godot
+    - dupl
+    - goconst
+    - depguard
+    - testifylint
+    - thelper
+    - tparallel
+    - paralleltest
+    - usestdlibvars
+    - perfsprint
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    funlen:
+      statements: 60
+      lines: -1
+    gocyclo:
+      min-complexity: 15
+    gocognit:
+      min-complexity: 20
+    nestif:
+      min-complexity: 4
+    lll:
+      line-length: 120
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-naming
+        - name: error-strings
+        - name: context-as-argument
+        - name: unused-parameter
+    wrapcheck:
+      # Applied to adapters only through the exclusion rule below.
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+    depguard:
+      rules:
+        domain:
+          files:
+            - "**/internal/domain/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/thnhdatle/wake/internal/domain
+        domain-tests:
+          files:
+            - "**/internal/domain/**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/thnhdatle/wake/internal/domain
+            - github.com/stretchr/testify
+            - github.com/google/go-cmp
+            - pgregory.net/rapid
+            - github.com/thnhdatle/wake/internal/testutil
+        app:
+          files:
+            - "**/internal/app/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - github.com/thnhdatle/wake/internal/domain
+            - github.com/thnhdatle/wake/internal/platform
+        app-tests:
+          files:
+            - "**/internal/app/**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/thnhdatle/wake/internal/domain
+            - github.com/thnhdatle/wake/internal/platform
+            - github.com/stretchr/testify
+            - github.com/google/go-cmp
+            - pgregory.net/rapid
+            - go.uber.org/goleak
+            - github.com/thnhdatle/wake/internal/testutil
+            - github.com/thnhdatle/wake/internal/app
+    godot:
+      scope: declarations
+      capital: false
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # wrapcheck is required for adapters only: every other package is excluded.
+      - path-except: ^internal/adapter/
+        linters:
+          - wrapcheck
+      # Relaxations for tests and the acceptance harness that cannot be avoided:
+      # long table-driven tests, repeated fixtures, literal fixture data, test credentials.
+      - path: (.+_test\.go|^acceptance/)
+        linters:
+          - funlen
+          - dupl
+          - goconst
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/thnhdatle/wake
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

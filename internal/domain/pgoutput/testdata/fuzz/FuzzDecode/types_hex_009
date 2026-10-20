@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("I\x00\x00@\tN\x00't\x00\x00\x00\x013nnnnnnnt\x00\x00\x00\t-Infinitynnnnnnnnnnt\x00\x00\x00\t-infinitynnnt\x00\x00\x00\binfinityt\x00\x00\x00\t-00:00:01nnnnnnnnnnnnnn")

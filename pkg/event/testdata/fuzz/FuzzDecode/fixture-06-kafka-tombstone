@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"kafka_record\":{\"topic\":\"cdc.public.users\",\"key\":\"{\\\"id\\\":43}\",\"value\":null,\"headers\":{}}}")

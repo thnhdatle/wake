@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("O\x00\x00\x00\x00\x00\x00_\xffupstream\x00")

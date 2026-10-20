@@ -1,0 +1,1 @@
+{"type":"schema_change","id":"0/16C0000-s0","source":{"db":"app","schema":"public","table":"users"},"lsn":"0/16C0000","ts_ms":1760600100000,"schema_version":4,"columns_before":[{"name":"id","type":"int8"},{"name":"email","type":"text"}],"columns_after":[{"name":"id","type":"int8"},{"name":"email","type":"text"},{"name":"country","type":"text"}]}

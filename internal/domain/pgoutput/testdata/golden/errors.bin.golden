@@ -1,0 +1,9 @@
+{"begin":{"final_lsn":"0/8000","ts_ms":1792308604187,"xid":900}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1}],"identity":"f","key_columns":["id"],"keyless":false,"oid":20050,"schema_version":1,"table":"syn.full","unknown_types":null}}
+{"error":"pgoutput: old tuple required but not sent: update of syn.full (REPLICA IDENTITY FULL)"}
+{"error":"pgoutput: unknown relation: oid 29999"}
+{"error":"pgoutput: binary column values are not supported: syn.full column \"id\""}
+{"commit":{"commit_lsn":"0/8000","end_lsn":"0/8030","flags":0,"ts_ms":1792308604187}}
+{"error":"pgoutput: unsupported message type 'S'"}
+{"error":"pgoutput: unsupported message type 'Z'"}
+{"error":"pgoutput: malformed message: 'B' message at offset 17: xid: need 4 bytes, have 2"}
