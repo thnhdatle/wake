@@ -1,0 +1,15 @@
+{"begin":{"final_lsn":"0/6000","ts_ms":1792308604187,"xid":900}}
+{"origin":{"commit_lsn":"0/5FFF","name":"upstream"}}
+{"type":"message","id":"0/6000-m0","lsn":"0/6000","ts_ms":1792308604187,"transactional":true,"prefix":"app.audit","content_base64":"aW4tdHg="}
+{"internal_message":{"content":"{\"kind\":\"low\"}","lsn":"0/5F10","prefix":"wake.watermark","transactional":true}}
+{"type":"message","id":"0/6000-m1","lsn":"0/6000","ts_ms":1792308604187,"transactional":true,"prefix":"app.audit","content_base64":"AP8="}
+{"commit":{"commit_lsn":"0/6000","end_lsn":"0/6030","flags":0,"ts_ms":1792308604187}}
+{"type":"message","id":"0/6100-m0","lsn":"0/6100","ts_ms":0,"transactional":false,"prefix":"app.audit","content_base64":"b3V0c2lkZQ=="}
+{"internal_message":{"content":"{}","lsn":"0/6110","prefix":"wake.heartbeat","transactional":false}}
+{"begin":{"final_lsn":"0/7000","ts_ms":1792308604187,"xid":901}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1}],"identity":"d","key_columns":["id"],"keyless":false,"oid":20040,"schema_version":1,"table":"syn.a","unknown_types":null}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1}],"identity":"d","key_columns":["id"],"keyless":false,"oid":20041,"schema_version":1,"table":"syn.b","unknown_types":null}}
+{"truncate":{"cascade":true,"relations":[20040,20041],"restart_identity":true}}
+{"id":"0/7000-0","source":{"db":"app","schema":"syn","table":"a"},"op":"t","ts_ms":1792308604187,"lsn":"0/7000","tx_id":901,"key":null,"before":null,"after":null,"schema_version":1}
+{"id":"0/7000-1","source":{"db":"app","schema":"syn","table":"b"},"op":"t","ts_ms":1792308604187,"lsn":"0/7000","tx_id":901,"key":null,"before":null,"after":null,"schema_version":1}
+{"commit":{"commit_lsn":"0/7000","end_lsn":"0/7030","flags":0,"ts_ms":1792308604187}}

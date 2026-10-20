@@ -1,0 +1,1 @@
+{"id":"0/16B3E00-0","source":{"db":"app","schema":"public","table":"logs"},"op":"c","ts_ms":1760600007000,"lsn":"0/16B3E00","tx_id":7819,"key":null,"before":null,"after":{"msg":"hello"},"schema_version":1}

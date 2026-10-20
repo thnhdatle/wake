@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thnhdatle/wake/api/schema/schema-change.v1.json",
+  "title": "Wake schema-change event v1",
+  "type": "object",
+  "required": ["type", "id", "source", "lsn", "ts_ms", "schema_version", "columns_before", "columns_after"],
+  "additionalProperties": false,
+  "properties": {
+    "type": {"const": "schema_change"},
+    "id": {"type": "string", "pattern": "^[0-9A-F]+/[0-9A-F]+-s[0-9]+$"},
+    "source": {
+      "type": "object",
+      "required": ["db", "schema", "table"],
+      "additionalProperties": false,
+      "properties": {
+        "db": {"type": "string"},
+        "schema": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+        "table": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"}
+      }
+    },
+    "lsn": {"type": "string", "pattern": "^[0-9A-F]+/[0-9A-F]+$"},
+    "ts_ms": {"type": "integer", "minimum": 0},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "columns_before": {"type": ["array", "null"], "items": {"$ref": "#/$defs/column"}},
+    "columns_after": {"type": "array", "items": {"$ref": "#/$defs/column"}}
+  },
+  "$defs": {
+    "column": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {"name": {"type": "string"}, "type": {"type": "string"}}
+    }
+  }
+}

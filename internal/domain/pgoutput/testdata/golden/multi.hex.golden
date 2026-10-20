@@ -1,0 +1,16 @@
+{"begin":{"final_lsn":"0/197D6F0","ts_ms":1792308605580,"xid":775}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1},{"key":false,"name":"a","oid":23,"type":"int4","typmod":-1}],"identity":"d","key_columns":["id"],"keyless":false,"oid":16430,"schema_version":1,"table":"rec.evolve","unknown_types":null}}
+{"id":"0/197D6F0-0","source":{"db":"app","schema":"rec","table":"evolve"},"op":"c","ts_ms":1792308605580,"lsn":"0/197D6F0","tx_id":775,"key":{"id":1},"before":null,"after":{"id":1,"a":1},"schema_version":1}
+{"id":"0/197D6F0-1","source":{"db":"app","schema":"rec","table":"evolve"},"op":"c","ts_ms":1792308605580,"lsn":"0/197D6F0","tx_id":775,"key":{"id":2},"before":null,"after":{"id":2,"a":2},"schema_version":1}
+{"id":"0/197D6F0-2","source":{"db":"app","schema":"rec","table":"evolve"},"op":"u","ts_ms":1792308605580,"lsn":"0/197D6F0","tx_id":775,"key":{"id":1},"before":{"id":1},"after":{"id":1,"a":3},"schema_version":1}
+{"type":"message","id":"0/197D6F0-m0","lsn":"0/197D6F0","ts_ms":1792308605580,"transactional":true,"prefix":"app.audit","content_base64":"aW4tdHg="}
+{"commit":{"commit_lsn":"0/197D6F0","end_lsn":"0/197D720","flags":0,"ts_ms":1792308605580}}
+{"type":"message","id":"0/197D768-m0","lsn":"0/197D768","ts_ms":0,"transactional":false,"prefix":"app.audit","content_base64":"b3V0c2lkZQ=="}
+{"begin":{"final_lsn":"0/197D7B0","ts_ms":1792308605580,"xid":776}}
+{"internal_message":{"content":"{}","lsn":"0/197D7B0","prefix":"wake.heartbeat","transactional":true}}
+{"commit":{"commit_lsn":"0/197D7B0","end_lsn":"0/197D7E0","flags":0,"ts_ms":1792308605580}}
+{"begin":{"final_lsn":"0/197DDB0","ts_ms":1792308605581,"xid":777}}
+{"relation":{"columns":[{"key":true,"name":"id","oid":23,"type":"int4","typmod":-1},{"key":false,"name":"a","oid":23,"type":"int4","typmod":-1}],"identity":"d","key_columns":["id"],"keyless":false,"oid":16430,"schema_version":1,"table":"rec.evolve","unknown_types":null}}
+{"truncate":{"cascade":false,"relations":[16430],"restart_identity":false}}
+{"id":"0/197DDB0-0","source":{"db":"app","schema":"rec","table":"evolve"},"op":"t","ts_ms":1792308605581,"lsn":"0/197DDB0","tx_id":777,"key":null,"before":null,"after":null,"schema_version":1}
+{"commit":{"commit_lsn":"0/197DDB0","end_lsn":"0/197DE80","flags":0,"ts_ms":1792308605581}}

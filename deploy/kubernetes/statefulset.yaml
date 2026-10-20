@@ -1,0 +1,107 @@
+# Wake as a single-replica StatefulSet (not a Deployment):
+# one replication slot consumer with persistent state. The PVC holds state.path and stream.spill_dir;
+# size it for the largest expected transaction (default 1Gi). Image tag is the release version.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wake
+  labels:
+    app.kubernetes.io/name: wake
+    app.kubernetes.io/component: cdc
+spec:
+  serviceName: wake
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wake
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wake
+        app.kubernetes.io/component: cdc
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9093"
+        prometheus.io/path: /metrics
+    spec:
+      terminationGracePeriodSeconds: 60
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wake
+          image: ghcr.io/thnhdatle/wake:v0.1.0
+          imagePullPolicy: IfNotPresent
+          args: ["run", "--config", "/etc/wake/config.yaml"]
+          env:
+            - name: WAKE_SOURCE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: wake-source
+                  key: dsn
+          ports:
+            - name: admin
+              containerPort: 9093
+              protocol: TCP
+          # /healthz for liveness: a blocked sink (/readyz 503) is fixed at the destination, a restart does not help.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/wake
+            - name: config
+              mountPath: /etc/wake
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: wake-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: wake
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"id\":\"0/16B3748-3\",\"source\":{\"db\":\"app\",\"schema\":\"public\",\"table\":\"users\"},\"op\":\"c\",\"ts_ms\":1760600000000,\"lsn\":\"0/16B3748\",\"tx_id\":7812,\"key\":{\"id\":42},\"before\":null,\"after\":{\"id\":42,\"email\":\"a@example.com\"},\"schema_version\":3}")

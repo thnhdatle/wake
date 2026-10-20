@@ -1,0 +1,8 @@
+# Apply with: kubectl apply -k deploy/kubernetes
+# The Secret wake-source (key dsn) is not included: create it first (see secret.example.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+  - service.yaml
+  - statefulset.yaml

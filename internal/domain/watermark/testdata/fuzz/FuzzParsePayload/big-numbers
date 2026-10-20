@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"nonce\":\"7ZZZZZZZZZZZZZZZZZZZZZZZZZ\",\"run\":18446744073709551615,\"table\":\"a.b\",\"chunk\":18446744073709551616,\"mark\":\"low\"}")

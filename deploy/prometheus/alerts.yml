@@ -1,0 +1,198 @@
+# Prometheus alerting rules for Wake. Explained in docs/guides/operations.md.
+#
+# Load with `rule_files: [alerts.yml]` in prometheus.yml. The rules assume Wake's
+# /metrics endpoint is scraped with job="wake" (the admin.listen address).
+groups:
+  - name: wake
+    rules:
+      # Thresholds: the expressions below repeat the defaults of lag.warn_bytes
+      # (1 GiB), lag.critical_bytes (10 GiB) and lag.max_ack_age (300 s). If you
+      # change those in the Wake config, change them here too. Wake also exports
+      # its own verdicts as wake_alert_active{rule}; WakeSinkFatal and
+      # WakeAlertActive below use that gauge.
+      - alert: WakeSlotLagWarn
+        # 1073741824 bytes = 1 GiB: mirrors lag.warn_bytes.
+        expr: wake_slot_lag_bytes > 1073741824
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Replication slot lag above 1 GiB (lag.warn_bytes)
+          description: >-
+            The replication slot read by {{ $labels.instance }} lags by
+            {{ $value | humanize1024 }}B of WAL, above the warning threshold for 5
+            minutes. A sink may be slow or blocked.
+
+      - alert: WakeSlotLagCritical
+        # 10737418240 bytes = 10 GiB: mirrors lag.critical_bytes.
+        expr: wake_slot_lag_bytes > 10737418240
+        labels:
+          severity: critical
+        annotations:
+          summary: Replication slot lag above 10 GiB (lag.critical_bytes); WAL is piling up
+          description: >-
+            The replication slot read by {{ $labels.instance }} retains
+            {{ $value | humanize1024 }}B of WAL. Unless it drains, the Postgres disk
+            fills or the slot is invalidated (max_slot_wal_keep_size). See the
+            runbooks in operations.md.
+
+      - alert: WakeAckAgeHigh
+        # 300 seconds: mirrors the default of lag.max_ack_age.
+        expr: wake_oldest_unacked_age_seconds > 300
+        labels:
+          severity: warning
+        annotations:
+          summary: Events are waiting for a sink longer than 300 s (lag.max_ack_age)
+          description: >-
+            The oldest event read by {{ $labels.instance }} and not yet acknowledged
+            by every sink is {{ $value | humanizeDuration }} old. A sink is retrying
+            (broker down, 5xx, rate limit) or stuck.
+
+      - alert: WakeSinkFatal
+        expr: wake_alert_active{rule="sink_fatal"} == 1
+        labels:
+          severity: critical
+        annotations:
+          summary: A sink is blocked by a non-retriable error; delivery is stopped
+          description: >-
+            A sink of {{ $labels.instance }} hit a non-retriable error
+            (event_too_large or sink_fatal) and /readyz returns 503. Delivery stays
+            blocked and WAL accumulates until the cause is fixed. See errors.md.
+
+      - alert: WakeAlertActive
+        # Any other rule Wake reports through wake_alert_active (the ones above are
+        # excluded so that they do not page twice).
+        expr: wake_alert_active{rule!~"sink_fatal|slot_lag_warn|slot_lag_critical|max_ack_age"} == 1
+        labels:
+          severity: warning
+        annotations:
+          summary: Wake alert rule {{ $labels.rule }} is firing
+          description: >-
+            {{ $labels.instance }} reports wake_alert_active{rule="{{ $labels.rule }}"}
+            = 1. See operations.md.
+
+      - alert: WakeSlotWalStatus
+        # 2 = unreserved, 3 = lost (wake_slot_wal_status; -1 before the first poll).
+        expr: wake_slot_wal_status >= 2
+        labels:
+          severity: critical
+        annotations:
+          summary: Slot WAL status is unreserved or lost
+          description: >-
+            The slot of {{ $labels.instance }} has wal_status
+            {{ if eq (printf "%.0f" $value) "3" }}lost: changes were discarded and the
+            slot is unusable (slot_invalidated){{ else }}unreserved: it is about to be
+            invalidated by max_slot_wal_keep_size{{ end }}.
+
+      - alert: WakeLagPollFailing
+        expr: increase(wake_lag_poll_errors_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Wake cannot read the slot status; lag metrics are stale
+          description: >-
+            {{ $labels.instance }} failed to poll pg_replication_slots in the last 10
+            minutes, so wake_slot_lag_bytes and the lag alerts are not current.
+
+      - alert: WakeDown
+        # A stopped Wake silences its own metrics while the slot keeps pinning WAL,
+        # so alert on the scrape itself (here) and on the missing series (next rule).
+        expr: up{job="wake"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Wake is not reachable; a stopped Wake keeps the slot pinning WAL
+          description: >-
+            Prometheus has not been able to scrape {{ $labels.instance }} (job wake)
+            for 5 minutes. The replication slot keeps retaining WAL until Wake runs
+            again or `wake slot drop` is used.
+
+      - alert: WakeMetricsAbsent
+        expr: absent(wake_slot_lag_bytes)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: wake_slot_lag_bytes is absent; Wake is down or not scraped
+          description: >-
+            No wake_slot_lag_bytes series exists for 5 minutes: Wake is stopped, the
+            scrape job is missing or relabeled, or Wake has not polled the slot yet.
+            The slot keeps pinning WAL while Wake is stopped.
+
+      - alert: WakeSnapshotRequests
+        # Requests for tables that are not captured count under table="_other".
+        # The threshold is a small steady rate: on-demand snapshots are rare.
+        expr: sum(rate(wake_snapshot_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Unusual number of snapshot requests
+          description: >-
+            Wake is receiving snapshot requests at {{ $value | humanize }} per second.
+            Check who can reach the snapshot interface and the tables requested
+            (table="_other" means uncaptured tables).
+
+      - alert: WakeSnapshotChunkRetries
+        expr: sum by (table) (increase(wake_snapshot_chunk_retries_total[15m])) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: Snapshot chunks of {{ $labels.table }} are repeatedly discarded and read again
+          description: >-
+            Concurrent writes keep invalidating snapshot chunks of {{ $labels.table }};
+            the snapshot progresses slowly or not at all.
+
+  - name: wake-cache
+    rules:
+      - alert: WakeCacheBreakerOpen
+        expr: wake_cache_breaker_state == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cache L2 circuit breaker is open for namespace {{ $labels.namespace }}
+          description: >-
+            Redis has been failing for 5 minutes; the cache serves L1 and loader
+            results only and invalidations are deferred.
+
+      - alert: WakeCacheBusDisconnected
+        expr: wake_cache_bus_connected == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cache invalidation bus is disconnected for namespace {{ $labels.namespace }}
+          description: >-
+            The cache of {{ $labels.instance }} lost its invalidation bus subscription;
+            L1 entries can be stale until their TTL.
+
+      - alert: WakeCdcsourceDeleteFailures
+        expr: sum by (kind) (increase(wake_cdcsource_delete_failures_total{kind="error"}[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Cache invalidator cannot delete keys
+          description: >-
+            wake cache-invalidator delete calls fail (not merely deferred); events are
+            retried until they succeed.
+
+  # Optional: needs postgres_exporter and does not depend on Wake, so it still
+  # fires when Wake is stopped or its metrics are missing. Metric and label names
+  # depend on the exporter version and collectors (the pg_replication_slots
+  # collector, or a custom query that exposes pg_wal_lsn_diff for each slot):
+  # adjust to yours. Set the threshold from your max_slot_wal_keep_size.
+  - name: wake-postgres-optional
+    rules:
+      - alert: WakeSlotLagWithoutWake
+        expr: pg_replication_slots_pg_wal_lsn_diff{slot_name=~"wake_.*"} > 10 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Slot retains more than 10 GiB of WAL (measured by Postgres, not by Wake)
+          description: >-
+            The replication slot {{ $labels.slot_name }} on {{ $labels.instance }}
+            retains {{ $value | humanize1024 }}B of WAL, as measured by postgres_exporter.
+            Check whether Wake is running; if the pipeline is retired, run `wake slot drop`.

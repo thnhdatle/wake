@@ -1,0 +1,1 @@
+{"id":"0/16D0010-r2-10000","source":{"db":"app","schema":"public","table":"orders"},"op":"r","ts_ms":1760600200000,"lsn":"0/16D0010","key":{"id":10001},"before":null,"after":{"id":10001,"total":"12.50"},"schema_version":1}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thnhdatle/wake/api/schema/logical-message.v1.json",
+  "title": "Wake forwarded logical message v1 (not part of the CDC event contract)",
+  "type": "object",
+  "required": ["type", "id", "lsn", "ts_ms", "transactional", "prefix", "content_base64"],
+  "additionalProperties": false,
+  "properties": {
+    "type": {"const": "message"},
+    "id": {"type": "string", "pattern": "^[0-9A-F]+/[0-9A-F]+-m[0-9]+$"},
+    "lsn": {"type": "string", "pattern": "^[0-9A-F]+/[0-9A-F]+$"},
+    "ts_ms": {"type": "integer", "minimum": 0},
+    "transactional": {"type": "boolean"},
+    "prefix": {"type": "string"},
+    "content_base64": {"type": "string"}
+  }
+}

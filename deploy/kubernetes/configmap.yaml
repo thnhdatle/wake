@@ -1,0 +1,29 @@
+# Wake configuration for the StatefulSet. See ../config.example.yaml for every key.
+# The DSN comes from the WAKE_SOURCE_DSN environment variable (Secret wake-source, see secret.example.yaml).
+# Edit source, tables and sinks for your environment; the values below are illustrative.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wake-config
+  labels:
+    app.kubernetes.io/name: wake
+    app.kubernetes.io/component: cdc
+data:
+  config.yaml: |
+    source:
+      name: app
+      dsn_env: WAKE_SOURCE_DSN
+    tables:
+      include: ["public.*"]
+    state:
+      path: /var/lib/wake/wake-state.json
+    stream:
+      spill_dir: /var/lib/wake/spill
+    sinks:
+      - name: kafka-main
+        type: kafka
+        kafka:
+          brokers: ["kafka:9092"]
+          topic_prefix: cdc
+    admin:
+      listen: 0.0.0.0:9093

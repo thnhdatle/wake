@@ -1,0 +1,268 @@
+# SPDX-License-Identifier: Apache-2.0
+# Admin HTTP API of `wake run` (admin.listen).
+# internal/adapter/httpadmin tests that every route here is registered and
+# every registered route is listed here.
+openapi: 3.1.0
+info:
+  title: Wake admin API
+  version: 0.1.0
+  description: >
+    Health, readiness, metrics, version and status endpoints of the Wake CDC
+    service. Error responses use the envelope
+    {"error": {"code", "message", "request_id"}}; codes are listed in
+    docs/guides/errors.md.
+servers:
+  - url: http://127.0.0.1:9093
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Process liveness; 200 while the process serves.
+      responses:
+        "200":
+          description: Alive.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "ok\n"
+  /readyz:
+    get:
+      operationId: getReadyz
+      summary: Readiness.
+      description: >
+        Ready when the configuration is loaded, the replication connection is
+        streaming (START_REPLICATION done, the reader is running and the
+        connection showed activity within three status intervals) and no sink
+        is blocked by a non-retriable error. A sink that is retrying after
+        retriable errors keeps the service ready.
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ready"
+        "503":
+          description: Not ready (code not_ready); checks lists every condition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Internal"
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics in the text exposition format.
+      responses:
+        "200":
+          description: Metrics.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /v1/version:
+    get:
+      operationId: getVersion
+      summary: Build information.
+      responses:
+        "200":
+          description: Version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Version"
+  /v1/status:
+    get:
+      operationId: getStatus
+      summary: Slot, confirmed LSN, lag, snapshot runs and progress, sinks and schema versions.
+      responses:
+        "200":
+          description: Status document.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "503":
+          description: Status unavailable (code status_unavailable), e.g. during startup.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Internal"
+components:
+  responses:
+    Internal:
+      description: A handler failed (code internal).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              example: not_ready
+            message:
+              type: string
+            request_id:
+              type: string
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Check"
+    Check:
+      type: object
+      required: [name, ok]
+      properties:
+        name:
+          type: string
+          enum: [config, replication, sink]
+        sink:
+          type: string
+        ok:
+          type: boolean
+        state:
+          type: string
+          enum: [healthy, retrying, fatal]
+        code:
+          type: string
+          example: event_too_large
+        reason:
+          type: string
+    Ready:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          const: ok
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Check"
+    Version:
+      type: object
+      required: [version, commit, build_date, go_version]
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        build_date:
+          type: string
+        go_version:
+          type: string
+    Status:
+      type: object
+      required: [origin, source, slot, confirmed_lsn, replication, snapshot, sinks, schemas]
+      properties:
+        origin:
+          type: string
+          enum: [admin, state_file]
+          description: >
+            admin when served by the running instance; `wake status` prints the
+            same document with state_file when it falls back to the state file
+            and pg_replication_slots (then replication and sinks are absent).
+        source:
+          type: string
+          description: source.name
+        slot:
+          type: object
+          properties:
+            name:
+              type: string
+            exists:
+              type: boolean
+            active_pid:
+              type: integer
+            wal_status:
+              type: string
+            confirmed_flush_lsn:
+              type: string
+            lag_bytes:
+              type: integer
+              description: pg_current_wal_lsn() - confirmed_flush_lsn
+            error:
+              type: string
+              description: Set when the slot query failed; the other fields are then absent.
+        confirmed_lsn:
+          type: string
+          description: End LSN of the contiguous acknowledged prefix (ack tracker).
+        status_sent_lsn:
+          type: string
+          description: Flushed LSN of the last standby status update sent.
+        replication:
+          type: object
+          properties:
+            streaming:
+              type: boolean
+            last_activity:
+              type: string
+              format: date-time
+        snapshot:
+          type: object
+          properties:
+            consistent_point:
+              type: string
+            runs:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  kind:
+                    type: string
+                    enum: [initial, table]
+                  chunk_rows:
+                    type: integer
+                  next_chunk:
+                    type: integer
+                  tables:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        table:
+                          type: string
+                        rows:
+                          type: integer
+                        done:
+                          type: boolean
+            queue:
+              type: array
+              items:
+                type: string
+        sinks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              state:
+                type: string
+              code:
+                type: string
+              reason:
+                type: string
+              since:
+                type: string
+                format: date-time
+        schemas:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Persisted schema version per "<schema>.<table>".

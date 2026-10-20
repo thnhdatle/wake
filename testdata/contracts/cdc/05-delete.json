@@ -1,0 +1,1 @@
+{"id":"0/16B3B00-0","source":{"db":"app","schema":"public","table":"users"},"op":"d","ts_ms":1760600004000,"lsn":"0/16B3B00","tx_id":7816,"key":{"id":43},"before":{"id":43,"email":"b@example.com"},"after":null,"schema_version":3}

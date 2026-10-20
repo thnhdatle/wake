@@ -1,0 +1,135 @@
+# Wake configuration: every key with its default; values marked 'example' are illustrative.
+# Durations: Go strings plus a 'd' suffix (30s, 14d). Sizes: bytes with suffix (64MiB).
+# Secrets only via environment variables (*_env keys) or *_file keys, never here.
+# Precedence: CLI flags > env vars > this file > defaults. Path: --config or WAKE_CONFIG.
+# Any scalar key outside 'sinks' can be overridden by WAKE_<PATH_IN_UPPER_SNAKE>, for example
+# WAKE_ADMIN_LISTEN or WAKE_STREAM_STATUS_INTERVAL; list keys take comma-separated values.
+
+
+# Source Postgres: connection and publication. The DSN is read from the env var named by dsn_env, never stored here.
+source:
+  name: app                         # example (required); [a-z0-9_]{1,58} (≤ 51 with managed emit_unkeyed); slot and managed publication wake_<name>; event source.db
+  dsn_env: WAKE_SOURCE_DSN
+  publication:
+    mode: managed                   # managed | existing
+    name: ""                        # existing mode only
+
+# Which tables are captured.
+tables:
+  include: ["public.*"]             # example
+  exclude: ["public.audit_*"]       # example
+  refresh_interval: 1m
+  skip_unkeyed: false
+  emit_unkeyed: false               # both modes; managed: keyless tables in wake_<name>_insert (publish = 'insert')
+  name_map: {}                      # {"<schema>.<table>": "<schema>.<table>"}
+
+# Optional event kinds.
+events:
+  emit_truncate: false
+  emit_messages: false
+
+# Initial snapshot and snapshot of added tables.
+snapshot:
+  mode: initial                     # initial | never; initial snapshot only
+  added_tables: true                # snapshot tables added later
+  chunk_rows: 10000
+  parallel_tables: 4
+
+# Replication stream, transaction assembly and acknowledgements.
+stream:
+  max_tx_bytes: 256MiB
+  spill_dir: ./spill
+  status_interval: 10s
+  min_confirm_bytes: 1MiB
+
+# State file.
+state:
+  path: ./wake-state.json
+
+# Destinations. Each entry needs a unique name and a type: kafka | nats | webhook | stdout.
+sinks:                              # example entries; per-sink keys show defaults unless marked example
+  - name: kafka-main                # example
+    type: kafka
+    tables: ["*"]                   # globs; [] = no tables
+    max_events: 1000
+    max_bytes: 1MiB
+    linger: 10ms
+    max_event_bytes: 1MiB           # default: kafka 1MiB, nats server max_payload, webhook 10MiB
+    kafka:
+      brokers: ["localhost:9092"]   # example
+      topic_prefix: cdc             # example
+      tombstones: true
+      auto_create_topics: false
+      partitions: 6                 # example; default -1 = broker num.partitions
+      replication_factor: 1         # example; default -1 = broker default.replication.factor
+      tls: { enabled: false, ca_file: "", cert_file: "", key_file: "" }
+      sasl: { mechanism: "", username_env: "", password_env: "" }   # SCRAM-SHA-256 | SCRAM-SHA-512
+  - name: nats-main                 # example
+    type: nats
+    tables: ["public.orders"]       # example
+    nats:
+      url: nats://localhost:4222    # example
+      subject_prefix: cdc           # example
+      create_stream: true
+      stream: wake_app              # default wake_<name>
+      duplicate_window: 2m
+      credentials_file: ""
+      tls: { enabled: false, ca_file: "", cert_file: "", key_file: "" }
+  - name: hooks                     # example
+    type: webhook
+    tables: ["public.users"]        # example
+    webhook:
+      url: https://example.internal/hooks/cdc   # example
+      secret_env: WAKE_WEBHOOK_SECRET           # example
+      timeout: 10s
+      lanes: 8
+      max_attempts: 10
+      dead_letter_dir: ./dlq        # example; default "" (opt-in); empty: poison batch blocks the sink (retried, alert, /readyz 503)
+  - name: debug                     # example
+    type: stdout
+    tables: []                      # example: no tables
+
+# Lag monitoring and alerts.
+lag:
+  interval: 15s
+  warn_bytes: 1GiB
+  critical_bytes: 10GiB
+  max_ack_age: 5m
+  alert_webhook: ""
+
+# Heartbeat.
+heartbeat:
+  interval: 1m
+
+# Admin HTTP: /healthz /readyz /metrics /v1/status /v1/version.
+admin:
+  listen: 127.0.0.1:9093            # compose: 0.0.0.0:9093
+
+# Only read by 'wake cache-invalidator'.
+cache_invalidator:                  # wake cache-invalidator only
+  admin_listen: 127.0.0.1:9096      # /healthz, /readyz, /metrics
+  source: kafka                     # kafka | nats
+  kafka:
+    brokers: ["localhost:9092"]     # example
+    topic_prefix: cdc               # example; topics derived from templates
+    group: wake-cache-invalidator
+    tls: { enabled: false, ca_file: "", cert_file: "", key_file: "" }
+    sasl: { mechanism: "", username_env: "", password_env: "" }
+  nats:
+    url: nats://localhost:4222      # example
+    subject_prefix: cdc             # example
+    stream: wake_app                # example
+    durable: wake-cache-invalidator
+    credentials_file: ""
+    tls: { enabled: false, ca_file: "", cert_file: "", key_file: "" }
+  redis:
+    addrs: ["localhost:6379"]       # example; several addrs: Cluster; master_name set: Sentinel
+    master_name: ""
+    password_env: ""
+    tls: { enabled: false, ca_file: "", cert_file: "", key_file: "" }
+  namespace: users                  # example
+  bus_channel: wake:inval:users     # default wake:inval:<namespace>
+  invalidate_on_snapshot: false
+  validate_dsn_env: WAKE_SOURCE_DSN # "" = runtime check only
+  templates:                        # example
+    public.users: ["user:{id}", "user:email:{email}"]

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"nonce\":\"01JB0000000000000000000000\",\"run\":1,\"table\":\"public.users\",\"chunk\":4,\"mark\":\"high\",\"snapshot\":\"100:110:100,104,108\",\"committed_xip\":[100,108]}")

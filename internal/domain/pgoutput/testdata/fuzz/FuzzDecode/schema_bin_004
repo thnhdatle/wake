@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("I\x00\x00N>N\x00\x01t\x00\x00\x00\x012")

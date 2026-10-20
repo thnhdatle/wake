@@ -1,0 +1,6 @@
+go body: valid
+go tampered: invalid: no matching v1 signature
+python3 body: valid
+python3 tampered: invalid: no matching v1 signature
+node body: valid
+node tampered: invalid: no matching v1 signature

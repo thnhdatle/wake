@@ -1,0 +1,35 @@
+# Headless Service for the StatefulSet identity, and a ClusterIP Service for the admin port (/healthz, /readyz, /metrics).
+# The admin endpoints have no authentication: restrict port 9093 with a NetworkPolicy.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wake
+  labels:
+    app.kubernetes.io/name: wake
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: wake
+  ports:
+    - name: admin
+      port: 9093
+      targetPort: admin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wake-admin
+  labels:
+    app.kubernetes.io/name: wake
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9093"
+    prometheus.io/path: /metrics
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wake
+  ports:
+    - name: admin
+      port: 9093
+      targetPort: admin

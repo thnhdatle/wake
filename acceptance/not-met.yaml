@@ -1,0 +1,13 @@
+# Explanations printed under "Not met" in report.md and bench/RESULTS.md when
+# the criterion fails. Keep the numbers in line with the published report.
+- id: WAK-05
+  cause: >-
+    In this run the offered load was 5,000 tx/s (one event each), equal to the
+    throughput threshold, so a Wake that keeps up acks about 600,000 events in
+    the 120 s window, give or take the events whose latency carries them across
+    the window edges. Measured in 3 runs with Wake native: 4999.70, 5000.05 and
+    4999.45 events/s (599,964, 600,006 and 599,934 events acked in the window),
+    median 4999.70 against ">= 5000"; latency p99 12 ms in every run (threshold
+    200 ms), p50 6 ms; Wake confirmed the final LSN about 0.2 s after the load
+    ended (208 ms in run 1), so no backlog built up. The result shows that Wake
+    kept up with 5,000 events/s; headroom above that rate was not measured.
