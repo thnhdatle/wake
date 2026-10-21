@@ -15,7 +15,7 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20261003132456-662581bb6bb6
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/klauspost/compress v1.20.3
-	github.com/moby/moby/api v1.55.0
+	github.com/moby/moby/api v1.56.1
 	github.com/nats-io/nats.go v1.54.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/oklog/ulid/v2 v2.1.2
