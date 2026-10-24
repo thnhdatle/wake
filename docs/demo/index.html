@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wake — Postgres Change Streaming</title>
+<script>
+  // Edit these.
+  const SITE = "https://your-site.example";
+  const PROJECT = "wake";
+  const REPO = "https://github.com/thnhdatle/wake";
+</script>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1117; --panel: #161b24; --line: #2a313c; --text: #e6edf3; --muted: #8b96a5;
+    --b: #2dd4bf; --a: #818cf8; --stall: #ef4444; --track: #0b0e14;
+    --big: 1.75rem; --body: 1rem; --small: .8125rem;
+    --jb: color-mix(in srgb, var(--b) 20%, transparent);
+    --jr: color-mix(in srgb, var(--stall) 18%, transparent);
+    --ja: color-mix(in srgb, var(--a) 16%, transparent); --la: color-mix(in srgb, var(--a) 60%, transparent);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 2.2rem 16px 3rem; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.7rem; }
+  .btn { display: inline-flex; align-items: center; color: var(--text); text-decoration: none;
+    font: 600 var(--small)/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: .68rem 1rem;
+    border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--text) 4%, transparent);
+    cursor: pointer; transition: transform .16s ease, border-color .16s ease; }
+  .btn:hover { border-color: currentColor; }
+  .back:hover { transform: translateX(-2px); }
+  h1 { margin: 0 0 .25rem; font-size: var(--big); line-height: 1.2; letter-spacing: -.01em; }
+  h1 span { color: var(--b); }
+  .sub { margin: 0 0 1.8rem; color: var(--muted); font-size: var(--body); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1.5rem 1.4rem; margin-bottom: 1.4rem; }
+  h2 { margin: 0 0 1.3rem; font-size: var(--small); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
+  .lbl { font-size: var(--small); font-weight: 700; margin-bottom: .5rem; }
+  .box { border: 1.5px solid var(--line); border-radius: 10px; padding: .7rem .75rem; }
+  .mid { display: flex; align-items: center; gap: .5rem; color: var(--muted); }
+  .hub { position: relative; border: 1.5px solid var(--b); color: var(--b); border-radius: 10px; padding: .6rem .8rem;
+    font-weight: 700; font-size: var(--body); text-align: center; min-width: 5.6rem; }
+  .hub small { display: block; font-size: var(--small); font-weight: 600; height: 1.3em; }
+  .hub small span { position: absolute; left: 0; right: 0; opacity: 0; }
+  .step { position: relative; height: 1.6em; margin-top: 1.2rem; font-size: var(--body); }
+  .step p { position: absolute; inset: 0; margin: 0; opacity: 0; }
+  .step p b { color: var(--b); }
+  .step p span { color: var(--muted); margin-right: .4rem; }
+  .scene { display: grid; grid-template-columns: 1fr auto 1.25fr; gap: 1rem; align-items: center; }
+
+  .row { display: flex; gap: 4px; }
+  .c { width: 24px; height: 24px; border-radius: 5px; border: 1.5px solid var(--la); background: var(--ja);
+    display: grid; place-items: center; font-size: var(--small); font-weight: 700; flex: none; }
+  .ok { border-color: var(--b); background: var(--jb); color: var(--b); opacity: 0; }
+  .dup { border-color: var(--a); color: var(--a); opacity: 0; position: relative; }
+  .dup::after { content: "twice"; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: .6rem; font-weight: 600; }
+  .conf { position: relative; height: 4px; margin-top: .45rem; border-radius: 2px; background: var(--track); width: 164px; }
+  .conf i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--b); border-radius: 2px; }
+  .cl { font-size: var(--small); color: var(--muted); margin-top: .3rem; }
+  .kbox { min-height: 3.4rem; }
+
+  .live .k1 { animation: k1 10s linear infinite; } .live .k2 { animation: k2 10s linear infinite; }
+  .live .k3 { animation: k3 10s linear infinite; } .live .k4 { animation: k4 10s linear infinite; }
+  .live .kd { animation: kd 10s linear infinite; } .live .k5 { animation: k5 10s linear infinite; }
+  .live .k6 { animation: k6 10s linear infinite; }
+  .live .conf i { animation: conf 10s linear infinite; }
+  .live .hub { animation: hub 10s linear infinite; }
+  .live .h0 { animation: h0 10s linear infinite; } .live .h1 { animation: h1 10s linear infinite; }
+  .live .h2 { animation: h2 10s linear infinite; }
+  .live .t1 { animation: t1 10s linear infinite; } .live .t2 { animation: t2 10s linear infinite; }
+  .live .t3 { animation: t3 10s linear infinite; } .live .t4 { animation: t4 10s linear infinite; }
+  @keyframes k1 { 0%, 6% { opacity: 0; transform: translateX(-8px); } 8%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes k2 { 0%, 10% { opacity: 0; transform: translateX(-8px); } 12%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes k3 { 0%, 14% { opacity: 0; transform: translateX(-8px); } 16%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes k4 { 0%, 27% { opacity: 0; transform: translateX(-8px); } 29%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes kd { 0%, 56% { opacity: 0; transform: translateX(-8px); } 58%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes k5 { 0%, 61% { opacity: 0; transform: translateX(-8px); } 63%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes k6 { 0%, 77% { opacity: 0; transform: translateX(-8px); } 79%, 97% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+  @keyframes conf { 0%, 18% { width: 0; } 21%, 83% { width: 50%; } 86%, 97% { width: 100%; } 100% { width: 0; } }
+  @keyframes hub { 0%, 34% { border-color: var(--b); color: var(--b); background: transparent; }
+    36%, 50% { border-color: var(--stall); color: var(--stall); background: var(--jr); }
+    52%, 100% { border-color: var(--b); color: var(--b); background: transparent; } }
+  @keyframes h0 { 0%, 34% { opacity: 1; } 36%, 100% { opacity: 0; } }
+  @keyframes h1 { 0%, 34% { opacity: 0; } 36%, 50% { opacity: 1; } 52%, 100% { opacity: 0; } }
+  @keyframes h2 { 0%, 51% { opacity: 0; } 53%, 98% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes t1 { 0%, 23% { opacity: 1; } 25%, 100% { opacity: 0; } }
+  @keyframes t2 { 0%, 25% { opacity: 0; } 27%, 48% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @keyframes t3 { 0%, 50% { opacity: 0; } 52%, 73% { opacity: 1; } 75%, 100% { opacity: 0; } }
+  @keyframes t4 { 0%, 75% { opacity: 0; } 77%, 98% { opacity: 1; } 100% { opacity: 0; } }
+
+  .q { font-size: var(--body); font-weight: 600; margin: 0 0 1.2rem; }
+  .lane { display: grid; grid-template-columns: 1fr 7.5rem; gap: .35rem 1.2rem; align-items: center; margin-bottom: 1.1rem; }
+  .lane .name { grid-column: 1 / -1; font-size: var(--small); color: var(--muted); }
+  .lane .name b { color: var(--text); }
+  .track { position: relative; height: 24px; border-radius: 6px; overflow: hidden; background: var(--track); border: 1px solid var(--line); }
+  .fill { position: absolute; top: 0; bottom: 0; left: 0; width: var(--w); background: var(--jb); border-right: 3px solid var(--b); }
+  .val { white-space: nowrap; font-size: var(--big); font-weight: 700; line-height: 1; text-align: right; color: var(--b); font-variant-numeric: tabular-nums; }
+  .live .fill { animation: grow 6s ease-out infinite; }
+  @keyframes grow { 0% { width: 0; } 45%, 100% { width: var(--w); } }
+  .note { font-size: var(--small); color: var(--muted); margin: .4rem 0 0; }
+  .ctl { display: flex; justify-content: flex-end; }
+
+  .paused * { animation-play-state: paused !important; }
+  .still * { animation-delay: -9.5s !important; animation-play-state: paused !important; }
+  .still .res * { animation-delay: -5.9s !important; }
+
+  @media (max-width: 560px) {
+    :root { --big: 1.4rem; }
+    .scene { grid-template-columns: 1fr; gap: .8rem; }
+    .mid { justify-content: center; }
+    .mid .ar { transform: rotate(90deg); }
+    .lane { grid-template-columns: 1fr 6rem; }
+    .step { height: 3em; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="demo">
+  <div class="top">
+    <a class="btn back" id="back" href="#">← back to project</a>
+    <a class="btn" id="code" href="#">code</a>
+  </div>
+
+  <h1><span>Wake</span> — streams Postgres changes to Kafka and caches</h1>
+  <p class="sub">If Wake crashes, it picks up where it left off. A change may arrive twice, but never goes missing.</p>
+
+  <section class="card idea">
+    <h2>How it works</h2>
+    <div class="scene">
+      <div>
+        <div class="lbl">Postgres changes</div>
+        <div class="box">
+          <div class="row"><span class="c">1</span><span class="c">2</span><span class="c">3</span><span class="c">4</span><span class="c">5</span><span class="c">6</span></div>
+          <div class="conf"><i></i></div>
+          <div class="cl">confirmed as delivered</div>
+        </div>
+      </div>
+      <div class="mid"><span class="ar">→</span>
+        <div class="hub">Wake<small><span class="h0">running</span><span class="h1">crashed</span><span class="h2">restarted</span></small></div>
+        <span class="ar">→</span></div>
+      <div>
+        <div class="lbl">Kafka</div>
+        <div class="box kbox">
+          <div class="row"><span class="c ok k1">1</span><span class="c ok k2">2</span><span class="c ok k3">3</span><span class="c ok k4">4</span><span class="c dup kd">4</span><span class="c ok k5">5</span><span class="c ok k6">6</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <p class="t1"><span>1</span>Changes 1–3 reach Kafka, so Wake tells Postgres they are delivered.</p>
+      <p class="t2"><span>2</span>Change 4 is sent, then Wake crashes before confirming it.</p>
+      <p class="t3"><span>3</span>Wake restarts from the last confirmed change and sends 4 and 5.</p>
+      <p class="t4"><span>4</span>Change 4 arrived twice, but <b>nothing is missing</b>.</p>
+    </div>
+  </section>
+
+  <section class="card res">
+    <h2>The result</h2>
+    <p class="q">How fast does a change spread?</p>
+    <div class="lane">
+      <div class="name"><b>Commit → event in Kafka</b></div>
+      <div class="track"><div class="fill" style="--w:64.9%"></div></div>
+      <div class="val">12 ms</div>
+    </div>
+    <div class="lane">
+      <div class="name"><b>Commit → old value gone from 3 app servers' cache</b></div>
+      <div class="track"><div class="fill" style="--w:100%"></div></div>
+      <div class="val">18.5 ms</div>
+    </div>
+    <p class="note">99% of changes arrive within this time. Kafka measured at 5,000 changes per second.</p>
+  </section>
+
+  <div class="ctl"><button class="btn" id="play" type="button">❚❚ pause</button></div>
+</div>
+<script>
+  document.getElementById("back").href = SITE.replace(/\/$/, "") + "/projects/" + PROJECT + "/";
+  document.getElementById("code").href = REPO;
+
+  const demo = document.getElementById("demo");
+  const btn = document.getElementById("play");
+  let running = false;
+
+  function start() {
+    demo.classList.remove("still", "paused");
+    demo.classList.add("live");
+    running = true;
+    btn.textContent = "❚❚ pause";
+  }
+  function pause() {
+    running = false;
+    demo.classList.add("paused");
+    btn.textContent = "▶ play";
+  }
+  btn.addEventListener("click", function () { running ? pause() : start(); });
+
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    demo.classList.add("live", "still");
+    btn.textContent = "▶ play";
+  } else {
+    start();
+  }
+</script>
+</body>
+</html>
