@@ -24,7 +24,6 @@ func execute(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// minimalConfig is a valid configuration whose DSN variable is never set.
 const minimalConfig = `source: {name: app, dsn_env: WAKE_TEST_DSN_NEVER_SET}
 tables: {include: ["public.*"]}
 sinks: [{name: out, type: stdout}]
@@ -95,7 +94,6 @@ func TestSnapshotTableRejectsBadNames(t *testing.T) {
 	}
 }
 
-// stateFixture is a state file with an unfinished table snapshot.
 const stateFixture = `{"format_version":1,"slot_name":"wake_app","system_id":"7",
 "consistent_point":"0/16B3748","run_counter":2,"schemas":{"public.users":{"version":3,"replica_identity":"d",
 "columns":[]}},"snapshot":{"runs":[{"id":2,"kind":"table","chunk_rows":100,"next_chunk":4,

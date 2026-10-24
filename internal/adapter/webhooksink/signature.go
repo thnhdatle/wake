@@ -12,18 +12,14 @@ import (
 	"time"
 )
 
-// Header names of a webhook request.
 const (
 	SignatureHeader  = "Wake-Signature"
 	DeliveryIDHeader = "Wake-Delivery-Id"
 )
 
-// DefaultTolerance is the default window for the signature timestamp that
-// receivers should accept.
 const DefaultTolerance = 5 * time.Minute
 
-// Sign returns the Wake-Signature header value for body signed at Unix time
-// t: "t=<t>,v1=<hex HMAC-SHA256(secret, t + "." + body)>".
+// Sign returns the signature header value for a body.
 func Sign(secret []byte, t int64, body []byte) string {
 	ts := strconv.FormatInt(t, 10)
 	return "t=" + ts + ",v1=" + hex.EncodeToString(mac(secret, ts, body))
@@ -37,11 +33,7 @@ func mac(secret []byte, ts string, body []byte) []byte {
 	return h.Sum(nil)
 }
 
-// Verify checks a Wake-Signature header against the raw body: one t, at
-// least one v1 (any matching v1 is accepted, so receivers can rotate
-// secrets), the HMAC compared in constant time, and |now - t| within
-// tolerance. A non-positive tolerance disables the time check. It returns an
-// error wrapping ErrInvalidSignature.
+// Verify checks a signature header against a body.
 func Verify(secret []byte, header string, body []byte, now time.Time, tolerance time.Duration) error {
 	ts, sigs, err := parseSignature(header)
 	if err != nil {

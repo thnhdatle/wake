@@ -42,7 +42,6 @@ func managedConfig(t *testing.T, emit, skip bool) *CheckConfig {
 	}
 }
 
-// byCheck maps each check to "status:code"; repeated checks get "#n".
 func byCheck(r *Report) map[string]string {
 	out := map[string]string{}
 	for _, f := range r.Findings {

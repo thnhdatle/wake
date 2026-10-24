@@ -18,7 +18,6 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/metrics"
 )
 
-// The sinks' observer interfaces are satisfied by metrics.SinkMetrics.
 var (
 	_ kafkasink.Observer   = (*metrics.SinkMetrics)(nil)
 	_ natssink.Observer    = (*metrics.SinkMetrics)(nil)
@@ -26,26 +25,19 @@ var (
 	_ stdoutsink.Observer  = (*metrics.SinkMetrics)(nil)
 )
 
-// latencyAcks feeds every acknowledged event's ts_ms to the end-to-end
-// latency histogram (wake_end_to_end_latency_seconds{sink}); it
-// implements each sink's AckObserver.
 type latencyAcks struct {
 	rec *lag.LatencyRecorder
 }
 
-// ObserveAck implements the sinks' AckObserver.
 func (l latencyAcks) ObserveAck(sink string, tsMs int64) { l.rec.Record(sink, tsMs) }
 
-// sinkEntry is one configured sink.
 type sinkEntry struct {
 	pipeline.Sink
 	typ    config.SinkType
 	tables []string
 }
 
-// buildSinks builds every configured sink with the shared metrics and the
-// latency recorder. Construction failures (TLS files, secrets, options) are
-// configuration errors.
+// buildSinks builds every configured sink.
 func buildSinks(cfg *config.Config, clk clock.Clock, log *slog.Logger, m *metrics.SinkMetrics,
 	acks latencyAcks,
 ) ([]sinkEntry, error) {

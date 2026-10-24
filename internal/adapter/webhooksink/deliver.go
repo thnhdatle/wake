@@ -18,10 +18,8 @@ import (
 )
 
 const (
-	userAgent = "wake-webhook/1"
-	// maxDrain bounds the response body read to reuse the connection.
-	maxDrain = 64 << 10
-	// cappedAttempt makes Backoff.Delay return its capped delay.
+	userAgent     = "wake-webhook/1"
+	maxDrain      = 64 << 10
 	cappedAttempt = 64
 )
 
@@ -33,18 +31,14 @@ const (
 	outcomePoison
 )
 
-// result is the classified outcome of one POST attempt.
 type result struct {
 	outcome    outcome
-	reason     string // RetryReason* for outcomeRetry and outcomePoison
-	status     int    // HTTP status, 0 without a response
+	reason     string
+	status     int
 	retryAfter time.Duration
 	err        error
 }
 
-// attempt POSTs the batch once. The delivery id is created on the first
-// attempt and reused by every retry; the signature is computed for each
-// attempt with the current time.
 func (s *Sink) attempt(ctx context.Context, d *delivery) result {
 	if d.id == "" {
 		id, err := s.newDeliveryID()
@@ -75,8 +69,6 @@ func (s *Sink) attempt(ctx context.Context, d *delivery) result {
 	return classify(resp)
 }
 
-// stripURL drops the *url.Error wrapper, whose message repeats the URL and
-// so possibly a token in its query.
 func stripURL(err error) error {
 	var ue *url.Error
 	if errors.As(err, &ue) {
@@ -105,8 +97,6 @@ func classify(resp *http.Response) result {
 	return res
 }
 
-// retryAfter parses a Retry-After header in delay-seconds form; the
-// HTTP-date form is ignored.
 func retryAfter(v string) time.Duration {
 	n, err := strconv.Atoi(v)
 	if err != nil || n <= 0 {
@@ -115,8 +105,6 @@ func retryAfter(v string) time.Duration {
 	return time.Duration(n) * time.Second
 }
 
-// handle acts on an attempt's result: it acknowledges, schedules a retry or
-// dead-letters, and returns the wait before the next attempt or done.
 func (s *Sink) handle(ctx context.Context, d *delivery, res *result, attempt int) (time.Duration, bool) {
 	switch res.outcome {
 	case outcomeOK:
@@ -134,9 +122,6 @@ func (s *Sink) handle(ctx context.Context, d *delivery, res *result, attempt int
 	return s.handlePoison(ctx, d, res, attempt)
 }
 
-// handlePoison retries a poison batch up to max_attempts, then dead-letters
-// and acknowledges it, or, without a dead-letter directory, keeps retrying
-// at the capped backoff with Health sink_fatal.
 func (s *Sink) handlePoison(ctx context.Context, d *delivery, res *result, attempt int) (time.Duration, bool) {
 	d.poison++
 	if d.poison < s.maxAttempts {
@@ -168,15 +153,12 @@ func (s *Sink) handlePoison(ctx context.Context, d *delivery, res *result, attem
 	return 0, true
 }
 
-// setHealth records the state of the batch's lane.
 func (s *Sink) setHealth(d *delivery, st pipeline.SinkState, code, reason string) {
 	s.mu.Lock()
 	s.health.set(d.batch.Lane, st, code, reason, s.clock.Now())
 	s.mu.Unlock()
 }
 
-// logBlocked logs a blocking failure at error level once per batch, then at
-// debug level.
 func (s *Sink) logBlocked(ctx context.Context, d *delivery, res *result, attempt int, msg string) {
 	level := slog.LevelDebug
 	if !d.blocked {
@@ -185,8 +167,6 @@ func (s *Sink) logBlocked(ctx context.Context, d *delivery, res *result, attempt
 	s.logAttempt(ctx, d, res, attempt, level, msg)
 }
 
-// logAttempt logs one attempt; retries after the first are logged at debug
-// level to keep a long outage from flooding the log.
 func (s *Sink) logAttempt(ctx context.Context, d *delivery, res *result, attempt int, level slog.Level, msg string) {
 	if level == slog.LevelWarn && attempt > 0 {
 		level = slog.LevelDebug

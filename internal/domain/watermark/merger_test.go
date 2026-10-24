@@ -11,7 +11,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// feeder drives a Merger the way the stream does.
 type feeder struct {
 	t testing.TB
 	m *watermark.Merger
@@ -22,7 +21,6 @@ func newFeeder(tb testing.TB) *feeder {
 	return &feeder{t: tb, m: watermark.NewMerger()}
 }
 
-// tx feeds a committed transaction that touched the given model keys.
 func (f *feeder) tx(xid uint32, keys ...int) {
 	f.t.Helper()
 	require.NoError(f.t, f.m.Begin(xid))
@@ -32,7 +30,6 @@ func (f *feeder) tx(xid uint32, keys ...int) {
 	require.NoError(f.t, f.m.Commit())
 }
 
-// move feeds a key-changing update from one key to another.
 func (f *feeder) move(xid uint32, from, to int) {
 	f.t.Helper()
 	require.NoError(f.t, f.m.Begin(xid))
@@ -78,11 +75,10 @@ func (f *feeder) high(xid uint32, chunk uint64, snap string, committed ...uint64
 
 func TestMerger_High_SingleChunk(t *testing.T) {
 	t.Parallel()
-	// Every case reads chunk 0 with rows for keys 1, 2, 3; LOW has xid 100.
 	cases := []struct {
 		name      string
-		before    func(f *feeder) // stream before LOW
-		window    func(f *feeder) // stream between LOW and HIGH
+		before    func(f *feeder)
+		window    func(f *feeder)
 		snap      string
 		committed []uint64
 		want      watermark.Outcome
@@ -127,9 +123,6 @@ func TestMerger_High_SingleChunk(t *testing.T) {
 			want:   watermark.Outcome{Keep: []int{1, 2}, DroppedInvisible: 1},
 		},
 		{
-			// The transaction got its xid after LOW's and wrote its commit
-			// record before LOW's, but left the proc array last: xmax is
-			// LOW+1, so it is invisible without being listed in xip.
 			name: "commit before LOW at or above xmax is dropped", snap: "101:101:",
 			before: func(f *feeder) { f.tx(101, 2) },
 			want:   watermark.Outcome{Keep: []int{0, 2}, DroppedInvisible: 1},
@@ -153,9 +146,6 @@ func TestMerger_High_SingleChunk(t *testing.T) {
 			want:   watermark.Outcome{Retry: true, RetryXID: 98},
 		},
 		{
-			// Postgres 15+ pgoutput skips transactions without published
-			// changes: the xid began after LOW, so it cannot have committed
-			// before the merger existed.
 			name: "unread committed xid newer than the first LOW is ignored", snap: "100:105:103",
 			committed: []uint64{103},
 			want:      watermark.Outcome{Keep: []int{0, 1, 2}},
@@ -200,15 +190,13 @@ func TestMerger_High_SingleChunk(t *testing.T) {
 func TestMerger_High_CarriesInvisibleAcrossChunks(t *testing.T) {
 	t.Parallel()
 	f := newFeeder(t)
-	f.tx(99, 1) // commit record read, then stuck before the proc array update
+	f.tx(99, 1)
 	f.low(100, 0)
 	f.rows(0, 1, 2)
 	out := f.high(101, 0, "99:101:99", 99)
 	assert.Equal(t, []int{1}, out.Keep)
 	assert.Equal(t, 1, f.m.Retained(), "invisible transaction kept after HIGH")
 
-	// Still invisible to the next chunk read: forgetting it at HIGH would
-	// force a retry here; retaining it drops the key instead.
 	f.low(102, 1)
 	f.rows(1, 1, 3)
 	out = f.high(103, 1, "99:103:99", 99)
@@ -216,7 +204,6 @@ func TestMerger_High_CarriesInvisibleAcrossChunks(t *testing.T) {
 	assert.Equal(t, []int{1}, out.Keep)
 	assert.Equal(t, 1, out.DroppedInvisible)
 
-	// Visible at last: kept and forgotten.
 	f.low(104, 2)
 	f.rows(2, 1)
 	out = f.high(105, 2, "105:105:")
@@ -229,7 +216,7 @@ func TestMerger_High_WindowCommitBecomesBeforeLow(t *testing.T) {
 	f := newFeeder(t)
 	f.low(100, 0)
 	f.rows(0, 1)
-	f.tx(102, 5) // commits after the read's snapshot was taken
+	f.tx(102, 5)
 	out := f.high(103, 0, "102:102:")
 	assert.Equal(t, []int{0}, out.Keep)
 	assert.Equal(t, 1, f.m.Retained(), "commit after the snapshot is not yet proven visible")
@@ -246,7 +233,7 @@ func TestMerger_Low_AbandonsOpenWindow(t *testing.T) {
 	f := newFeeder(t)
 	f.low(100, 0)
 	f.tx(101, 1)
-	f.low(102, 1) // chunk 0 was given up before its HIGH
+	f.low(102, 1)
 	f.rows(1, 1, 2)
 
 	p := highPayload(0, watermark.Snapshot{Xmin: 103, Xmax: 103})
@@ -270,7 +257,6 @@ func TestMerger_High_RetryThenRerun(t *testing.T) {
 	assert.Equal(t, uint64(98), out.RetryXID)
 	assert.Nil(t, out.Keep)
 
-	// The re-run gets a new chunk counter; the old transaction is visible.
 	f.tx(102, 2)
 	f.low(103, 1)
 	f.rows(1, 1, 2)
@@ -283,9 +269,9 @@ func TestMerger_High_WraparoundXIDs(t *testing.T) {
 	t.Parallel()
 	const epoch = uint64(7) << 32
 	f := newFeeder(t)
-	f.tx(0xFFFFFFFE, 1) // invisible, listed in xip of the next epoch's snapshot
-	f.tx(0xFFFFFFFF, 2) // visible
-	f.low(3, 0)         // xid wrapped to the next epoch (0..2 are special)
+	f.tx(0xFFFFFFFE, 1)
+	f.tx(0xFFFFFFFF, 2)
+	f.low(3, 0)
 	f.rows(0, 1, 2, 3)
 	f.tx(5, 3)
 	out := f.high(6, 0, snapText(epoch|0xFFFFFFFE, 8<<32|6, epoch|0xFFFFFFFE), epoch|0xFFFFFFFE)
@@ -294,8 +280,6 @@ func TestMerger_High_WraparoundXIDs(t *testing.T) {
 	assert.Equal(t, 1, out.DroppedInvisible)
 	assert.Equal(t, 1, out.DroppedWindow)
 
-	// An xid of the previous epoch that the merger never read forces a
-	// retry: it precedes the first LOW.
 	f.low(7, 1)
 	f.rows(1, 4)
 	out = f.high(8, 1, snapText(epoch|0xFFFFFFF0, 8<<32|8, epoch|0xFFFFFFF0), epoch|0xFFFFFFF0)

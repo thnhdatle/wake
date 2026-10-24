@@ -18,17 +18,12 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pgoutput"
 )
 
-// Replication is a raw logical replication client for tests that must not
-// depend on the pgrepl adapter: it creates slots with an exported snapshot,
-// starts pgoutput streaming and decodes messages with pgoutput.Decoder.
+// Replication is a raw logical replication client for tests.
 type Replication struct {
-	conn *pgconn.PgConn
-	// Decoder holds the relation cache of the stream.
+	conn    *pgconn.PgConn
 	Decoder *pgoutput.Decoder
 }
 
-// Replication opens a replication connection (replication=database) to the
-// database as the superuser, closed when the test ends.
 func (d *Database) Replication(tb testing.TB) *Replication {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
@@ -43,8 +38,6 @@ func (d *Database) Replication(tb testing.TB) *Replication {
 	return &Replication{conn: conn, Decoder: pgoutput.NewDecoder()}
 }
 
-// CreateSlot creates a pgoutput slot with EXPORT_SNAPSHOT and returns the
-// snapshot name and consistent point.
 func (r *Replication) CreateSlot(tb testing.TB, slot string) (snapshot string, cp lsn.LSN) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
@@ -57,8 +50,6 @@ func (r *Replication) CreateSlot(tb testing.TB, slot string) (snapshot string, c
 	return res.SnapshotName, cp
 }
 
-// Start runs START_REPLICATION with proto_version 1, the publications and
-// messages 'true'.
 func (r *Replication) Start(tb testing.TB, slot string, start lsn.LSN, publications ...string) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
@@ -73,8 +64,6 @@ func (r *Replication) Start(tb testing.TB, slot string, start lsn.LSN, publicati
 	require.NoError(tb, err)
 }
 
-// Next returns the next decoded pgoutput message, answering keepalives. It
-// fails the test after timeout.
 func (r *Replication) Next(tb testing.TB, timeout time.Duration) pgoutput.Message {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -104,8 +93,6 @@ func (r *Replication) Next(tb testing.TB, timeout time.Duration) pgoutput.Messag
 	}
 }
 
-// NextRow returns the row images of the next Insert, Update or Delete
-// (skipping other messages) and its relation.
 func (r *Replication) NextRow(tb testing.TB, timeout time.Duration) (pgoutput.RowImages, uint32) {
 	tb.Helper()
 	deadline := time.Now().Add(timeout)

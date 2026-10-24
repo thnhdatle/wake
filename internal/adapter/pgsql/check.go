@@ -10,17 +10,14 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Status is the outcome of one pre-flight check.
 type Status string
 
-// Check outcomes.
 const (
 	StatusOK   Status = "ok"
 	StatusWarn Status = "warn"
 	StatusFail Status = "fail"
 )
 
-// Names of the pre-flight checks (`wake check`).
 const (
 	CheckServerVersion = "server_version"
 	CheckWALLevel      = "wal_level"
@@ -35,26 +32,20 @@ const (
 	CheckWALRetention  = "wal_retention"
 )
 
-// minServerVersion is the oldest supported server_version_num.
 const minServerVersion = 140000
 
-// Finding is the result of one check.
 type Finding struct {
-	Check  string
-	Status Status
-	// Code is the error code of a warning or failure.
+	Check   string
+	Status  Status
 	Code    string
 	Message string
-	// Tables lists the affected tables as "<schema>.<table>".
-	Tables []string
+	Tables  []string
 }
 
-// Report is the result of the pre-flight checks, in check order.
 type Report struct {
 	Findings []Finding
 }
 
-// Failed reports whether any check failed.
 func (r *Report) Failed() bool {
 	for _, f := range r.Findings {
 		if f.Status == StatusFail {
@@ -68,42 +59,30 @@ func (r *Report) add(check string, st Status, code, msg string, tables ...string
 	r.Findings = append(r.Findings, Finding{Check: check, Status: st, Code: code, Message: msg, Tables: tables})
 }
 
-// CheckConfig is the configuration the checks evaluate.
 type CheckConfig struct {
-	// SlotName is the slot wake_<source.name>.
-	SlotName string
-	// Managed selects source.publication.mode managed; Source is
-	// source.name, Publication the existing-mode publication.
+	SlotName    string
 	Managed     bool
 	Source      string
 	Publication string
 	EmitUnkeyed bool
 	SkipUnkeyed bool
-	// Resolver applies the include/exclude globs, name_map and the keyless
-	// rule (pipeline.TablePolicy).
-	Resolver pipeline.TableResolver
+	Resolver    pipeline.TableResolver
 }
 
-// CheckFacts are the observations the checks evaluate (GatherCheckFacts).
 type CheckFacts struct {
-	Settings pipeline.ServerSettings
-	Usage    Usage
-	Slot     pipeline.SlotStatus
-	// System and ReplicationErr are the IDENTIFY_SYSTEM outcome.
+	Settings       pipeline.ServerSettings
+	Usage          Usage
+	Slot           pipeline.SlotStatus
 	System         pipeline.SystemInfo
 	ReplicationErr error
-	// CanCreate is CREATE on the database.
-	CanCreate bool
-	// Candidates are the tables managed mode may publish; Main and Insert
-	// the managed publications (managed mode).
-	Candidates []Table
-	Main       ExistingPublication
-	Insert     ExistingPublication
-	// Existing is the existing-mode publication.
-	Existing ExistingPublication
+	CanCreate      bool
+	Candidates     []Table
+	Main           ExistingPublication
+	Insert         ExistingPublication
+	Existing       ExistingPublication
 }
 
-// Evaluate runs the checks over the facts. It is pure.
+// Evaluate turns the gathered facts into a check report.
 func Evaluate(f *CheckFacts, cfg *CheckConfig) Report {
 	var r Report
 	checkServer(&r, f)
@@ -136,7 +115,6 @@ func checkServer(r *Report, f *CheckFacts) {
 	}
 }
 
-// codeOf returns the error code an error carries, or def.
 func codeOf(err error, def string) string {
 	var coded interface{ ErrorCode() string }
 	if errors.As(err, &coded) {
@@ -220,8 +198,6 @@ func checkExistingPublication(r *Report, f *CheckFacts) {
 	}
 }
 
-// checkTables evaluates identifiers, keys and (managed) ownership of the
-// tables the globs match.
 func checkTables(r *Report, tables []Table, cfg *CheckConfig, managed bool) {
 	var captured, invalid, keyless, unkeyed, notOwned []string
 	for i := range tables {

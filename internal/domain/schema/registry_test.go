@@ -202,8 +202,6 @@ func TestRegistry_State_RoundTrip(t *testing.T) {
 	assert.False(t, clone.Observe(&a).Changed, "exported state is a deep copy")
 }
 
-// TestRegistry_VersionsNeverDecrease checks that a schema version never
-// decreases under arbitrary sequences of Seed, Observe and Reinit.
 func TestRegistry_VersionsNeverDecrease(t *testing.T) {
 	t.Parallel()
 	tables := []string{"a", "b", "c"}

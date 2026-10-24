@@ -14,15 +14,13 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Catalog answers the catalog questions of startup, `wake check` and the
-// lag monitor. It implements pipeline.Catalog and stream.KeyColumnSource and
-// is safe for concurrent use.
+// Catalog reads server, slot and table metadata.
 type Catalog struct {
 	pool *Pool
 	o    options
 }
 
-// NewCatalog validates the dependencies.
+// NewCatalog returns a Catalog that uses pool.
 func NewCatalog(pool *Pool, opts ...Option) (*Catalog, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("%w: nil pool", ErrInvalidArgument)
@@ -34,7 +32,6 @@ func NewCatalog(pool *Pool, opts ...Option) (*Catalog, error) {
 	return &Catalog{pool: pool, o: o}, nil
 }
 
-// query runs fn on a pooled connection within the query timeout.
 func (c *Catalog) query(ctx context.Context, fn func(context.Context, *pgx.Conn) error) error {
 	ctx, cancel := context.WithTimeout(ctx, c.o.queryTimeout)
 	defer cancel()
@@ -43,7 +40,6 @@ func (c *Catalog) query(ctx context.Context, fn func(context.Context, *pgx.Conn)
 
 const settingsSQL = `SELECT name, setting, COALESCE(unit, '') FROM pg_catalog.pg_settings WHERE name = ANY($1)`
 
-// ServerSettings implements pipeline.Catalog.
 func (c *Catalog) ServerSettings(ctx context.Context) (pipeline.ServerSettings, error) {
 	rowsByName := map[string]setting{}
 	err := c.query(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -77,8 +73,6 @@ const slotSQL = `SELECT COALESCE(plugin, '')::text, confirmed_flush_lsn::text, C
 		ELSE pg_catalog.pg_current_wal_lsn() END - confirmed_flush_lsn)::int8, 0)
 FROM pg_catalog.pg_replication_slots WHERE slot_name = $1`
 
-// Slot implements pipeline.Catalog: the slot's row of pg_replication_slots
-// with LagBytes = pg_current_wal_lsn() - confirmed_flush_lsn.
 func (c *Catalog) Slot(ctx context.Context, name string) (pipeline.SlotStatus, error) {
 	var st pipeline.SlotStatus
 	err := c.query(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -105,16 +99,12 @@ func (c *Catalog) Slot(ctx context.Context, name string) (pipeline.SlotStatus, e
 	return st, nil
 }
 
-// publicationTablesSQL lists the tables of publications as Postgres
-// publishes them (partition roots with publish_via_partition_root, leaves
-// otherwise).
 const publicationTablesSQL = `SELECT ` + tableColumnsSQL + `
 FROM (SELECT DISTINCT schemaname, tablename FROM pg_catalog.pg_publication_tables WHERE pubname = ANY($1)) pt
 JOIN pg_catalog.pg_namespace n ON n.nspname = pt.schemaname
 JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = pt.tablename
 ORDER BY n.nspname, c.relname`
 
-// PublicationTables implements pipeline.Catalog.
 func (c *Catalog) PublicationTables(ctx context.Context, publications []string) ([]pipeline.TableInfo, error) {
 	tables, err := c.PublicationTableDetails(ctx, publications)
 	if err != nil {
@@ -127,8 +117,6 @@ func (c *Catalog) PublicationTables(ctx context.Context, publications []string) 
 	return out, nil
 }
 
-// PublicationTableDetails lists the tables of publications with replica
-// identity, key, partitioning and ownership details, sorted by name.
 func (c *Catalog) PublicationTableDetails(ctx context.Context, publications []string) ([]Table, error) {
 	var tables []Table
 	err := c.query(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -142,7 +130,6 @@ func (c *Catalog) PublicationTableDetails(ctx context.Context, publications []st
 	return tables, err
 }
 
-// CurrentTime implements pipeline.Catalog: Postgres clock_timestamp().
 func (c *Catalog) CurrentTime(ctx context.Context) (time.Time, error) {
 	var t time.Time
 	err := c.query(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -158,8 +145,6 @@ const keyColumnsSQL = `SELECT ` + primaryKeyColumnsSQL + `
 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = $1 AND c.relname = $2`
 
-// KeyColumns implements stream.KeyColumnSource: the primary key columns in
-// key order; none for a table without primary key or an unknown table.
 func (c *Catalog) KeyColumns(ctx context.Context, schemaName, table string) ([]string, error) {
 	var cols []string
 	err := c.query(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -175,15 +160,11 @@ func (c *Catalog) KeyColumns(ctx context.Context, schemaName, table string) ([]s
 	return cols, err
 }
 
-// Usage is the replication capacity in use (pre-flight check).
 type Usage struct {
-	// Slots is the number of replication slots.
-	Slots int
-	// Senders is the number of WAL sender processes.
+	Slots   int
 	Senders int
 }
 
-// Usage counts the slots and WAL senders in use.
 func (c *Catalog) Usage(ctx context.Context) (Usage, error) {
 	var u Usage
 	err := c.query(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -197,5 +178,4 @@ func (c *Catalog) Usage(ctx context.Context) (Usage, error) {
 	return u, err
 }
 
-// Compile-time check of the port Catalog implements.
 var _ pipeline.Catalog = (*Catalog)(nil)

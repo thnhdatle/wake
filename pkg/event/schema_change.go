@@ -9,39 +9,27 @@ import (
 
 // Column is one column of a table definition in a schema-change event.
 type Column struct {
-	// Name is the column name.
 	Name string `json:"name"`
-	// Type is the Postgres type name.
 	Type string `json:"type"`
 }
 
-// schemaChangeType is the value of the "type" member of schema-change events.
 const schemaChangeType = "schema_change"
 
-// SchemaChange is a CDC schema-change event, emitted before the first data event
-// that uses a new relation definition. Its JSON form carries "type":
-// "schema_change".
+// SchemaChange is a CDC schema-change event.
 type SchemaChange struct {
 	// ID has the form "<lsn>-s<k>".
-	ID string `json:"id"`
-	// Source is the table that changed.
-	Source Source `json:"source"`
-	// LSN is the commit LSN of the data event that first uses the new relation.
-	LSN string `json:"lsn"`
-	// TsMs is the commit time in Unix milliseconds.
-	TsMs int64 `json:"ts_ms"`
-	// SchemaVersion is the new per-table schema counter.
-	SchemaVersion int64 `json:"schema_version"`
-	// ColumnsBefore is nil when the table was not known before (JSON null).
+	ID            string `json:"id"`
+	Source        Source `json:"source"`
+	LSN           string `json:"lsn"`
+	TsMs          int64  `json:"ts_ms"`
+	SchemaVersion int64  `json:"schema_version"`
+	// ColumnsBefore is nil when the table was not known before.
 	ColumnsBefore []Column `json:"columns_before"`
-	// ColumnsAfter is the new column set.
-	ColumnsAfter []Column `json:"columns_after"`
+	ColumnsAfter  []Column `json:"columns_after"`
 }
 
-// schemaChangeAlias drops the methods of SchemaChange to avoid recursion.
 type schemaChangeAlias SchemaChange
 
-// schemaChangeWire is the JSON form: the alias plus the constant type member.
 type schemaChangeWire struct {
 	Type string `json:"type"`
 	schemaChangeAlias
@@ -56,8 +44,7 @@ var (
 	}
 )
 
-// DecodeSchemaChange decodes and validates a CDC schema-change event. Errors
-// follow the rules of Decode.
+// DecodeSchemaChange decodes and validates a CDC schema-change event.
 func DecodeSchemaChange(data []byte) (*SchemaChange, error) {
 	if err := probe(data, schemaChangeRequired, schemaChangeNonNull); err != nil {
 		return nil, err
@@ -76,7 +63,6 @@ func DecodeSchemaChange(data []byte) (*SchemaChange, error) {
 	return &s, nil
 }
 
-// validate checks the id, the shared fields and the columns.
 func (s *SchemaChange) validate() error {
 	seq, err := ParseSeq(s.ID)
 	if err != nil {
@@ -98,13 +84,12 @@ func (s *SchemaChange) validate() error {
 	return nil
 }
 
-// Seq returns the position of the event in the order of its source; Schema is
-// true so it sorts before the data event with the same LSN and K.
+// Seq returns the position of the event in the order of its source.
 func (s *SchemaChange) Seq() (Seq, error) {
 	return ParseSeq(s.ID)
 }
 
-// MarshalJSON encodes the event with its "type": "schema_change" member.
+// MarshalJSON encodes the event with its type member.
 func (s SchemaChange) MarshalJSON() ([]byte, error) {
 	b, err := json.Marshal(schemaChangeWire{Type: schemaChangeType, schemaChangeAlias: schemaChangeAlias(s)})
 	if err != nil {

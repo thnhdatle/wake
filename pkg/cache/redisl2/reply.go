@@ -13,8 +13,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2"
 )
 
-// millis converts d to the whole milliseconds the scripts use, rounding up
-// so that a positive duration never becomes 0 (which means "no expiry").
 func millis(d time.Duration) int64 {
 	if d <= 0 {
 		return 0
@@ -22,8 +20,6 @@ func millis(d time.Duration) int64 {
 	return int64((d + time.Millisecond - 1) / time.Millisecond)
 }
 
-// parseUint parses a decimal reply: the scripts return generations and
-// epochs as strings so that no Lua number conversion is involved.
 func parseUint(v any) (uint64, error) {
 	var (
 		n   uint64
@@ -46,7 +42,6 @@ func parseUint(v any) (uint64, error) {
 	return n, nil
 }
 
-// parseRead decodes the read script's reply: {gen} or {gen, ttl_ms, payload}.
 func parseRead(v any) (l2.ReadResult, error) {
 	arr, ok := v.([]any)
 	if !ok || (len(arr) != 1 && len(arr) != 3) {
@@ -71,12 +66,10 @@ func parseRead(v any) (l2.ReadResult, error) {
 	return res, nil
 }
 
-// isNoScript reports a NOSCRIPT reply to EVALSHA (empty script cache).
 func isNoScript(err error) bool {
 	return errors.Is(err, redis.ErrNoScript) || redis.HasErrorPrefix(err, "NOSCRIPT")
 }
 
-// unavailable wraps a failed command for op on key (empty for epoch ops).
 func unavailable(op, key string, err error) error {
 	if key == "" {
 		return fmt.Errorf("redisl2: %s: %w: %w", op, ErrUnavailable, err)

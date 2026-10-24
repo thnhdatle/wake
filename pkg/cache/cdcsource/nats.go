@@ -18,76 +18,55 @@ import (
 
 // NATS defaults.
 const (
-	// DefaultNATSMaxBatch bounds the messages handled per batch.
 	DefaultNATSMaxBatch = 256
-	// DefaultNATSAckWait is the consumer's ack wait. Messages of a batch whose
-	// handling takes longer are kept in progress, not redelivered.
-	DefaultNATSAckWait = 30 * time.Second
-	// natsFetchWait bounds one wait for the first message of a batch.
-	natsFetchWait = 5 * time.Second
-	// natsRequestTimeout bounds JetStream API requests.
-	natsRequestTimeout = 10 * time.Second
+	DefaultNATSAckWait  = 30 * time.Second
+	natsFetchWait       = 5 * time.Second
+	natsRequestTimeout  = 10 * time.Second
 )
 
-// NATSConfig configures a NATSSource; it mirrors the cache_invalidator.nats
-// section of the Wake configuration.
+// NATSConfig configures a NATSSource.
 type NATSConfig struct {
-	// URL is the server URL (nats://host:port, several separated by commas).
+	// URL is the server URL, or several separated by commas.
 	URL string
-	// SubjectPrefix is the producer's subject prefix: the consumer filters
-	// "<SubjectPrefix>.<schema>.<table>" for every mapped table.
-	SubjectPrefix string
-	// Stream is the JetStream stream holding the events.
-	Stream string
-	// Durable is the durable consumer name, created or updated by Consume.
-	Durable string
-	// CredentialsFile is a user credentials file (optional).
+	// SubjectPrefix is the producer's subject prefix.
+	SubjectPrefix   string
+	Stream          string
+	Durable         string
 	CredentialsFile string
-	// TLS enables TLS when non-nil.
-	TLS *tls.Config
-	// AckWait is the consumer's ack wait (default DefaultNATSAckWait).
+	TLS             *tls.Config
+	// AckWait is the consumer ack wait, DefaultNATSAckWait by default.
 	AckWait time.Duration
-	// MaxBatch bounds the messages per batch (default DefaultNATSMaxBatch).
+	// MaxBatch bounds the messages per batch, DefaultNATSMaxBatch by default.
 	MaxBatch int
 }
 
-// natsConn is the part of a NATS connection the source uses.
 type natsConn interface {
 	consumer(ctx context.Context, stream string, cfg jetstream.ConsumerConfig) (natsConsumer, error)
 	connected() bool
 	close()
 }
 
-// natsConsumer is the part of jetstream.Consumer the source uses.
 type natsConsumer interface {
 	Fetch(batch int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error)
 	FetchNoWait(batch int) (jetstream.MessageBatch, error)
 }
 
-// NATSSource consumes CDC events from a JetStream durable pull consumer with
-// explicit acks. Consume creates or updates the consumer (filter subjects
-// derived from the mapping, deliver policy all, so keys cached before the
-// first run are invalidated too). A message is acknowledged only after the
-// handler returned nil; while a batch is retried its messages are kept in
-// progress, and when Consume stops before handling them they are negatively
-// acknowledged so they are redelivered at once.
+// NATSSource consumes CDC events from a JetStream durable pull consumer with explicit acks.
 type NATSSource struct {
-	cfg      NATSConfig
-	subjects []string
-	maxBatch int
-	ackWait  time.Duration
-	log      *slog.Logger
-	dial     func(cfg *NATSConfig) (natsConn, error)
-	// retryMin and retryMax bound the delays after transport errors.
+	cfg                NATSConfig
+	subjects           []string
+	maxBatch           int
+	ackWait            time.Duration
+	log                *slog.Logger
+	dial               func(cfg *NATSConfig) (natsConn, error)
 	retryMin, retryMax time.Duration
 
 	mu      sync.Mutex
-	conn    natsConn // non-nil while consuming; guarded by mu
-	lastErr error    // last transport error, nil after a clean fetch; guarded by mu
+	conn    natsConn
+	lastErr error
 }
 
-// NewNATSSource validates cfg and returns a source for the subjects of the
-// mapped tables. It starts nothing; the connection is made by Consume.
+// NewNATSSource validates cfg and returns a source for the subjects of the mapped tables.
 func NewNATSSource(cfg NATSConfig, mapping *Mapping, opts ...SourceOption) (*NATSSource, error) {
 	if mapping == nil {
 		return nil, invalidConfig("nats: nil mapping")
@@ -137,8 +116,7 @@ func (c *NATSConfig) validate() error {
 // Subjects returns the filter subjects, sorted.
 func (s *NATSSource) Subjects() []string { return append([]string(nil), s.subjects...) }
 
-// Consume implements Source. It returns nil when ctx ends and an error when
-// the handler fails or the connection cannot be set up.
+// Consume implements Source.
 func (s *NATSSource) Consume(ctx context.Context, handle Handler) error {
 	conn, err := s.dial(&s.cfg)
 	if err != nil {
@@ -162,7 +140,7 @@ func (s *NATSSource) Consume(ctx context.Context, handle Handler) error {
 				s.log.Warn("nats fetch failed", "error", err, "attempt", attempt+1)
 				sleepCtx(ctx, retryDelay(attempt, s.retryMin, s.retryMax))
 				attempt++
-				break // re-create the consumer: it may have been deleted
+				break
 			}
 			attempt = 0
 			s.noteErr(nil)
@@ -174,8 +152,6 @@ func (s *NATSSource) Consume(ctx context.Context, handle Handler) error {
 	return nil
 }
 
-// openConsumer creates or updates the durable consumer, retrying until it
-// succeeds or ctx ends.
 func (s *NATSSource) openConsumer(ctx context.Context, conn natsConn) (natsConsumer, error) {
 	cfg := jetstream.ConsumerConfig{
 		Durable:        s.cfg.Durable,
@@ -206,9 +182,6 @@ func (s *NATSSource) openConsumer(ctx context.Context, conn natsConn) (natsConsu
 	}
 }
 
-// fetch waits up to natsFetchWait for one message, then takes whatever else
-// is available at once, up to maxBatch messages in total. It returns no
-// messages and no error when nothing arrived.
 func (s *NATSSource) fetch(ctx context.Context, cons natsConsumer) ([]jetstream.Msg, error) {
 	fctx, cancel := context.WithTimeout(ctx, natsFetchWait)
 	defer cancel()
@@ -227,7 +200,7 @@ func (s *NATSSource) fetch(ctx context.Context, cons natsConsumer) ([]jetstream.
 	if err != nil {
 		return msgs, nil //nolint:nilerr // the first message is handled; the next fetch reports the error
 	}
-	more, _ := drain(b) // an error ends the batch early; the next fetch reports it
+	more, _ := drain(b)
 	return append(msgs, more...), nil
 }
 
@@ -239,8 +212,6 @@ func drain(b jetstream.MessageBatch) ([]jetstream.Msg, error) {
 	return msgs, b.Error()
 }
 
-// process hands one batch to handle, keeping its messages in progress
-// meanwhile, then acknowledges them; on failure it naks them.
 func (s *NATSSource) process(ctx context.Context, msgs []jetstream.Msg, handle Handler) error {
 	if len(msgs) == 0 {
 		return nil
@@ -254,22 +225,18 @@ func (s *NATSSource) process(ctx context.Context, msgs []jetstream.Msg, handle H
 	stop()
 	if err != nil {
 		for _, m := range msgs {
-			_ = m.Nak() // best effort: without it the server redelivers after AckWait
+			_ = m.Nak()
 		}
 		return err
 	}
 	for _, m := range msgs {
 		if err := m.Ack(); err != nil {
-			// Redelivered after AckWait and invalidated again (idempotent).
 			s.log.Warn("nats ack failed", "error", err)
 		}
 	}
 	return nil
 }
 
-// keepInProgress resets the ack timer of msgs every third of AckWait until
-// the returned function is called, so a batch whose Delete is retried for a
-// long time is not redelivered meanwhile.
 func (s *NATSSource) keepInProgress(msgs []jetstream.Msg) (stop func()) {
 	done := make(chan struct{})
 	var wg sync.WaitGroup
@@ -282,7 +249,7 @@ func (s *NATSSource) keepInProgress(msgs []jetstream.Msg) (stop func()) {
 				return
 			case <-t.C:
 				for _, m := range msgs {
-					_ = m.InProgress() // best effort; a lost one only risks a duplicate
+					_ = m.InProgress()
 				}
 			}
 		}
@@ -306,8 +273,7 @@ func (s *NATSSource) noteErr(err error) {
 	s.lastErr = err
 }
 
-// Check reports whether the source is consuming, connected and its last
-// JetStream request succeeded.
+// Check reports whether the source is consuming and connected.
 func (s *NATSSource) Check(context.Context) error {
 	s.mu.Lock()
 	conn, lastErr := s.conn, s.lastErr
@@ -321,14 +287,11 @@ func (s *NATSSource) Check(context.Context) error {
 	return lastErr
 }
 
-// liveNATS is the production natsConn.
 type liveNATS struct {
 	nc *nats.Conn
 	js jetstream.JetStream
 }
 
-// dialNATS connects with unlimited reconnects and retries on a failed first
-// connect, so it returns before the server is reachable.
 func dialNATS(cfg *NATSConfig) (natsConn, error) {
 	opts := []nats.Option{
 		nats.Name("wake-cache-invalidator"),

@@ -32,7 +32,7 @@ func TestRegistryState_RoundTrip(t *testing.T) {
 				},
 			},
 			{Table: "public.orders", Version: 1<<63 + 5, Identity: schema.IdentityDefault, Columns: []schema.Column{}},
-			{Table: "public.unknown", Version: 8}, // unknown shape: nil columns
+			{Table: "public.unknown", Version: 8},
 			{Table: "public.unknown_identity", Version: 2, Identity: schema.IdentityNothing},
 		},
 	}
@@ -151,7 +151,7 @@ func genStTable(name string) *rapid.Generator[schema.TableState] {
 				ts.Columns = []schema.Column{}
 			}
 		} else if rapid.Bool().Draw(t, "identityOnly") {
-			ts.Identity = schema.IdentityFull // identity known, columns unknown
+			ts.Identity = schema.IdentityFull
 		}
 		return ts
 	})

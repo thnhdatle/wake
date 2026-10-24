@@ -4,12 +4,7 @@ package pgoutput
 
 import "fmt"
 
-// Parse decodes one pgoutput protocol version 1 message (the payload of an
-// XLogData message). It is pure: Relation column type names stay empty and
-// no cache is updated (use Decoder for that). Byte fields of the result
-// (tuple data, message content) alias data; copy them before reusing the
-// buffer. Malformed input returns an error wrapping ErrMalformed and never
-// panics or allocates more than a small multiple of len(data).
+// Parse decodes one pgoutput message.
 func Parse(data []byte) (Message, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("%w: empty message", ErrMalformed)

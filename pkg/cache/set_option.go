@@ -11,8 +11,7 @@ type setConfig struct {
 	ttl time.Duration
 }
 
-// WithSetTTL overrides WithTTL for this value; the TTL is used as given,
-// without jitter. A non-positive ttl makes Set fail.
+// WithSetTTL overrides WithTTL for this value.
 func WithSetTTL(ttl time.Duration) SetOption {
 	return func(c *setConfig) {
 		c.ttl = ttl

@@ -4,19 +4,13 @@ package pgoutput
 
 import "github.com/thnhdatle/wake/internal/domain/lsn"
 
-// Commit ends a transaction.
 type Commit struct {
-	// Flags is currently unused by Postgres (always 0).
 	Flags     uint8
 	CommitLSN lsn.LSN
-	// EndLSN is the end of the commit record: the LSN to confirm as flushed
-	// once the transaction is acknowledged.
-	EndLSN lsn.LSN
-	// TsMs is the commit time in Unix milliseconds.
-	TsMs int64
+	EndLSN    lsn.LSN
+	TsMs      int64
 }
 
-// MessageType implements Message.
 func (*Commit) MessageType() MessageType { return MessageCommit }
 
 func parseCommit(r *reader) *Commit {

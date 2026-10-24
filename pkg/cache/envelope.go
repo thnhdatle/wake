@@ -8,8 +8,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// Payload envelope stored in L2 (inside the l2 value record): one flags
-// byte followed by the codec bytes, zstd-compressed when flagZstd is set.
 const (
 	flagNegative byte = 1 << 0
 	flagZstd     byte = 1 << 1
@@ -17,11 +15,9 @@ const (
 	maxDecodedBytes = 64 << 20
 )
 
-// envelope seals and opens payloads. The decoder always exists so payloads
-// compressed by another instance can be read.
 type envelope struct {
 	minBytes int
-	enc      *zstd.Encoder // nil without compression
+	enc      *zstd.Encoder
 	dec      *zstd.Decoder
 }
 
@@ -73,7 +69,7 @@ func (e *envelope) open(payload []byte) (raw []byte, negative bool, err error) {
 
 func (e *envelope) close() {
 	if e.enc != nil {
-		_ = e.enc.Close() // EncodeAll-only encoder: Close cannot fail
+		_ = e.enc.Close()
 	}
 	e.dec.Close()
 }

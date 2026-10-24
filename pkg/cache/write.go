@@ -11,12 +11,8 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/l1"
 )
 
-// maxEpochRetries bounds how often a write is repeated because the
-// namespace epoch changed under it.
 const maxEpochRetries = 3
 
-// Set implements Cache: one L2 script increments the generation, writes v
-// with it and publishes the invalidation; then L1 is set locally.
 func (c *cache[V]) Set(ctx context.Context, key string, v V, opts ...SetOption) error {
 	if c.closed.Load() {
 		return errClosed
@@ -64,10 +60,6 @@ func (c *cache[V]) Set(ctx context.Context, key string, v V, opts ...SetOption) 
 	return c.deferInvalidation(key, "set")
 }
 
-// Delete implements Cache: per key one L2 script increments the
-// generation, deletes the value and publishes the invalidation; then the
-// key is removed from the local L1. While L2 is unreachable the key is
-// removed locally and its invalidation deferred (ErrDeferred).
 func (c *cache[V]) Delete(ctx context.Context, keys ...string) error {
 	if c.closed.Load() {
 		return errClosed
@@ -101,8 +93,6 @@ func (c *cache[V]) deleteOne(ctx context.Context, key string) error {
 	return c.deferInvalidation(key, "delete")
 }
 
-// invalidate runs the L2 invalidation of key and clears it from the pending
-// set (only additions that happened before the script ran).
 func (c *cache[V]) invalidate(ctx context.Context, key string) (l2.WriteResult, error) {
 	seq := c.pending.seq()
 	res, err := c.writeAtCurrentEpoch(ctx, func(epoch uint64) (l2.WriteResult, error) {
@@ -116,10 +106,6 @@ func (c *cache[V]) invalidate(ctx context.Context, key string) (l2.WriteResult, 
 	return res, nil
 }
 
-// writeAtCurrentEpoch runs write at the cached epoch and repeats it at the
-// epoch the server reports when they differ, so an instance that has not
-// yet seen an epoch change still invalidates the live keyspace. It records
-// failures itself.
 func (c *cache[V]) writeAtCurrentEpoch(ctx context.Context, write func(epoch uint64) (l2.WriteResult, error)) (
 	l2.WriteResult, error,
 ) {
@@ -140,8 +126,6 @@ func (c *cache[V]) writeAtCurrentEpoch(ctx context.Context, write func(epoch uin
 	return l2.WriteResult{}, errEpochUnstable
 }
 
-// deferInvalidation queues key for replay, or fails when deferral is
-// disabled.
 func (c *cache[V]) deferInvalidation(key, op string) error {
 	if c.cfg.maxPending == 0 {
 		return fmt.Errorf("cache: %s %q: %w", op, key, errL2Unavailable)

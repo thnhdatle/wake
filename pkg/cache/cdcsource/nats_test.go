@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeMsg is a jetstream.Msg recording acknowledgements.
 type fakeMsg struct {
 	data []byte
 
@@ -72,7 +71,6 @@ func (m *fakeMsg) counts() (acks, naks int) {
 	return m.acks, m.naks
 }
 
-// fakeBatch is a finished jetstream.MessageBatch.
 type fakeBatch struct {
 	ch  chan jetstream.Msg
 	err error
@@ -90,20 +88,15 @@ func batchOf(err error, msgs ...*fakeMsg) *fakeBatch {
 func (b *fakeBatch) Messages() <-chan jetstream.Msg { return b.ch }
 func (b *fakeBatch) Error() error                   { return b.err }
 
-// fetchResult is one scripted Fetch or FetchNoWait answer.
 type fetchResult struct {
 	batch *fakeBatch
 	err   error
 }
 
-// fakeConsumer answers Fetch and FetchNoWait from scripts, then blocks Fetch
-// until its FetchContext ends.
 type fakeConsumer struct {
-	mu      sync.Mutex
-	fetches []fetchResult
-	noWaits []fetchResult
-	// idle is closed when the Fetch script is exhausted; later Fetch calls
-	// block until done is closed.
+	mu       sync.Mutex
+	fetches  []fetchResult
+	noWaits  []fetchResult
 	idle     chan struct{}
 	idleOnce sync.Once
 	done     <-chan struct{}
@@ -128,8 +121,6 @@ func (c *fakeConsumer) Fetch(batch int, _ ...jetstream.FetchOpt) (jetstream.Mess
 	if c.idle != nil {
 		c.idleOnce.Do(func() { close(c.idle) })
 	}
-	// Like the real client once FetchContext ends: an empty batch with the
-	// context's error.
 	<-done
 	ch := make(chan jetstream.Msg)
 	close(ch)
@@ -150,7 +141,6 @@ func (c *fakeConsumer) FetchNoWait(int) (jetstream.MessageBatch, error) {
 	return r.batch, nil
 }
 
-// fakeNATSConn hands out consumers, failing the first consumerErrs calls.
 type fakeNATSConn struct {
 	mu           sync.Mutex
 	consumers    []*fakeConsumer
@@ -203,8 +193,6 @@ func newTestNATSSource(t *testing.T, conn *fakeNATSConn, cfg NATSConfig) *NATSSo
 	return s
 }
 
-// consumeUntilIdle runs Consume until cons has served its script, then
-// stops it and returns Consume's result.
 func consumeUntilIdle(t *testing.T, s *NATSSource, cons *fakeConsumer, handle Handler) error {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
@@ -299,8 +287,6 @@ func TestNATSSource_Consume_HandlerErrorNaks(t *testing.T) {
 	assert.Equal(t, 1, naks)
 }
 
-// TestNATSSource_Consume_KeepsSlowBatchInProgress checks that the messages
-// of a batch whose handler is still retrying are kept in progress.
 func TestNATSSource_Consume_KeepsSlowBatchInProgress(t *testing.T) {
 	t.Parallel()
 	m1 := newFakeMsg([]byte("a"))
@@ -310,7 +296,7 @@ func TestNATSSource_Consume_KeepsSlowBatchInProgress(t *testing.T) {
 	cfg.AckWait = 30 * time.Millisecond
 	s := newTestNATSSource(t, conn, cfg)
 	handle := func(context.Context, [][]byte) error {
-		<-m1.progressed // returns once InProgress was sent
+		<-m1.progressed
 		return nil
 	}
 
@@ -395,8 +381,6 @@ func TestNATSSource_Consume_DialError(t *testing.T) {
 	require.EqualError(t, s.Consume(t.Context(), (&recorder{}).handle), "bad credentials file")
 }
 
-// TestNATSSource_Consume_RealClientUnreachable runs nats.go against a closed
-// port: the connection keeps retrying and Consume returns nil when ctx ends.
 func TestNATSSource_Consume_RealClientUnreachable(t *testing.T) {
 	t.Parallel()
 	var lc net.ListenConfig

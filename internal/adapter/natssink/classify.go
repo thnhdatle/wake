@@ -17,17 +17,12 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// jsErrMessageExceedsLimit is the JetStream API error code of a message
-// above the stream's max_msg_size (nats-server errors.json).
 const jsErrMessageExceedsLimit jetstream.ErrorCode = 10054
 
-// verdict is the classification of a delivery error. Every
-// error is retried; a fatal one also makes Health report SinkStateFatal with
-// code until the cause is fixed.
 type verdict struct {
 	fatal  bool
-	code   string // pipeline.CodeEventTooLarge or pipeline.CodeSinkFatal when fatal
-	reason string // RetryReason* label
+	code   string
+	reason string
 }
 
 func fatal(reason string) verdict {
@@ -47,10 +42,6 @@ var networkErrors = []error{
 	context.DeadlineExceeded, context.Canceled, io.EOF, io.ErrUnexpectedEOF, net.ErrClosed,
 }
 
-// classify sorts err into retriable and non-retriable: message too
-// large, authentication or permission failures, a missing stream with
-// nats.create_stream off and other rejections by JetStream are
-// non-retriable; disconnections, timeouts and no responders are retriable.
 func classify(err error) verdict {
 	switch {
 	case errors.Is(err, ErrEventTooLarge):
@@ -107,7 +98,6 @@ func isAuthError(err error) bool {
 		errors.As(err, &verify) || errors.As(err, &alert) || errors.As(err, &header)
 }
 
-// apiError extracts the JetStream API error of a publish or stream request.
 func apiError(err error) *jetstream.APIError {
 	var api *jetstream.APIError
 	if errors.As(err, &api) {

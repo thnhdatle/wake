@@ -94,7 +94,6 @@ func TestCache_GetOrLoad_NegativeExpires(t *testing.T) {
 	assert.Equal(t, 3, v)
 }
 
-// blockingLoader blocks until release is closed and counts calls.
 type blockingLoader struct {
 	calls   atomic.Int32
 	entered chan struct{}
@@ -152,7 +151,7 @@ func TestCache_GetOrLoad_WaiterPollsWhenBusSilent(t *testing.T) {
 	holder := newBlockingLoader(42)
 	go func() { _, _ = a.GetOrLoad(ctx, "k", holder.load) }()
 	<-holder.entered
-	b.cli.PauseBus() // "loaded" never reaches b
+	b.cli.PauseBus()
 	waiterCalls := 0
 	got := make(chan int, 1)
 	go func() {
@@ -181,7 +180,6 @@ func TestCache_GetOrLoad_FallbackAfterLockTimeout(t *testing.T) {
 	e := newEnv(t)
 	b := e.instance()
 	ctx := t.Context()
-	// A holder that never finishes and whose lock never expires.
 	_, _, lockKey := l2.KeyNames(testNS, b.epoch.Load(), "k")
 	e.srv.RawSet(lockKey, "stuck")
 	calls := 0
@@ -281,7 +279,7 @@ func TestCache_GetOrLoad_LeaderCanceledFollowerRetries(t *testing.T) {
 	eventually(t, func() bool { return metricValue(a.m.l1Misses) == 2 })
 	cancel()
 	require.ErrorIs(t, <-leaderErr, context.Canceled)
-	<-loader.entered // the follower's retry runs its own load
+	<-loader.entered
 	close(loader.release)
 	assert.Equal(t, 7, <-got)
 }
@@ -379,8 +377,6 @@ func TestCache_GetOrLoad_HolderRecheckFindsValue(t *testing.T) {
 	e := newEnv(t)
 	a, b := e.instance(), e.instance()
 	ctx := t.Context()
-	// b fills L2 between a's first read and a's lock: a's holder re-check
-	// must find it and not call the loader.
 	a.cli.SetHooks(l2fake.Hooks{Before: func(_ context.Context, op l2fake.Op, _ string) error {
 		if op == l2fake.OpLock {
 			a.cli.SetHooks(l2fake.Hooks{})
@@ -431,7 +427,7 @@ func TestCache_GetOrLoad_HolderFailures(t *testing.T) {
 	tests := []struct {
 		name   string
 		failOp l2fake.Op
-		nth    int32 // fail the nth call of failOp
+		nth    int32
 		prefil bool
 	}{
 		{"holder re-check read fails", l2fake.OpRead, 2, false},
@@ -446,7 +442,7 @@ func TestCache_GetOrLoad_HolderFailures(t *testing.T) {
 			var n atomic.Int32
 			a.cli.SetHooks(l2fake.Hooks{Before: func(_ context.Context, op l2fake.Op, _ string) error {
 				if tc.prefil && op == l2fake.OpLock {
-					require.NoError(t, b.Set(ctx, "k", 5)) // makes the holder's re-check a hit
+					require.NoError(t, b.Set(ctx, "k", 5))
 				}
 				if op == tc.failOp && n.Add(1) == tc.nth {
 					return errors.New("timeout")

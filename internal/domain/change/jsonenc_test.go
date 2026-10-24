@@ -39,9 +39,6 @@ func TestAppendString_MatchesEncodingJSON(t *testing.T) {
 	})
 }
 
-// TestAppendString_LongRunsMatchEncodingJSON covers the 8-byte plain ASCII
-// fast path: long runs of plain bytes with a byte that needs escaping (or
-// is not ASCII) at any offset, and AppendStringBytes on the same input.
 func TestAppendString_LongRunsMatchEncodingJSON(t *testing.T) {
 	t.Parallel()
 	plain := rapid.SampledFrom([]byte("aZ09 ~!#$%&'()*+,-./:;<=>?@[]^_`{|}\x7f"))
@@ -195,7 +192,6 @@ func TestValidIdentifier(t *testing.T) {
 	assert.Equal(t, "public.users", change.Source{Schema: "public", Table: "users"}.QualifiedName())
 }
 
-// fixture mirrors the CDC event fields with ordered row images.
 type fixture struct {
 	ID            string          `json:"id"`
 	Source        sourceJSON      `json:"source"`

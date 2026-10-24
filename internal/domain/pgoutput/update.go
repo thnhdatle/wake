@@ -2,22 +2,14 @@
 
 package pgoutput
 
-// OldKind tells which old tuple an Update or Delete carries.
 type OldKind byte
 
-// Old tuple kinds.
 const (
-	// OldNone means no old tuple: an Update under a DEFAULT or INDEX replica
-	// identity whose key did not change.
 	OldNone OldKind = 0
-	// OldKey is a 'K' tuple: every relation column, with values only for the
-	// replica identity columns (others are 'n').
-	OldKey OldKind = 'K'
-	// OldFull is an 'O' tuple: the whole old row (REPLICA IDENTITY FULL).
+	OldKey  OldKind = 'K'
 	OldFull OldKind = 'O'
 )
 
-// Update is a changed row. Old is set when OldKind is OldKey or OldFull.
 type Update struct {
 	RelationOID uint32
 	OldKind     OldKind
@@ -25,7 +17,6 @@ type Update struct {
 	New         Tuple
 }
 
-// MessageType implements Message.
 func (*Update) MessageType() MessageType { return MessageUpdate }
 
 func parseUpdate(r *reader) *Update {

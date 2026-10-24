@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# govulncheck, go-licenses (allowlist below, see CONTRIBUTING.md) and trivy on the local image.
+# Runs govulncheck, go-licenses and trivy on the local image.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=scripts/lib.sh

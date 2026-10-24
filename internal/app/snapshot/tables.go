@@ -10,31 +10,22 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Table is a captured table as the snapshotter needs it.
 type Table struct {
-	// Name is the Postgres "<schema>.<table>": the key of state progress,
-	// watermark payloads and snapshot requests.
-	Name string
-	// Schema and Table are the Postgres names for chunk reads.
+	Name   string
 	Schema string
 	Table  string
-	// Source is the events' source (tables.name_map applied).
 	Source change.Source
 }
 
-// TableSource lists the captured tables.
 type TableSource interface {
 	CapturedTables(ctx context.Context) ([]Table, error)
 }
 
-// PublicationLister lists the tables of publications; pipeline.Catalog
-// implements it.
 type PublicationLister interface {
 	PublicationTables(ctx context.Context, publications []string) ([]pipeline.TableInfo, error)
 }
 
-// CatalogTables is the TableSource of the published tables the resolver
-// captures.
+// CatalogTables lists the published tables that are captured.
 type CatalogTables struct {
 	lister       PublicationLister
 	publications []string
@@ -49,7 +40,6 @@ func NewCatalogTables(l PublicationLister, publications []string, r pipeline.Tab
 	return &CatalogTables{lister: l, publications: publications, resolver: r}, nil
 }
 
-// CapturedTables implements TableSource.
 func (c *CatalogTables) CapturedTables(ctx context.Context) ([]Table, error) {
 	infos, err := c.lister.PublicationTables(ctx, c.publications)
 	if err != nil {

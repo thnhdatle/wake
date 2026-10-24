@@ -9,8 +9,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// RegistryState converts the schema versions of a state file to the
-// registry's form. A table persisted without columns has an unknown shape.
 func RegistryState(st *pipeline.State) schema.RegistryState {
 	rs := schema.RegistryState{Floor: st.SchemaFloor, Tables: make([]schema.TableState, 0, len(st.Schemas))}
 	for name, ts := range maps.All(st.Schemas) {
@@ -29,7 +27,6 @@ func RegistryState(st *pipeline.State) schema.RegistryState {
 	return rs
 }
 
-// setRegistryState replaces the schema versions of a state file.
 func setRegistryState(st *pipeline.State, rs *schema.RegistryState) {
 	st.SchemaFloor = rs.Floor
 	st.Schemas = make(map[string]pipeline.TableSchema, len(rs.Tables))

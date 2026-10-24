@@ -19,7 +19,6 @@ func src(schema, table string) change.Source {
 	return change.Source{DB: "app", Schema: schema, Table: table}
 }
 
-// eventRec returns an update of the transaction committed at 110.
 func eventRec(s change.Source, k uint64, key string) pipeline.Record {
 	ev := change.Event{ID: change.StreamID(110, k), Source: s, Op: change.OpUpdate}
 	if key != "" {
@@ -28,8 +27,6 @@ func eventRec(s change.Source, k uint64, key string) pipeline.Record {
 	return pipeline.NewEventRecord(&ev)
 }
 
-// routerFixture builds sinks "all" (*), "orders" (public.orders), "public"
-// (public.*) and "none" ([]).
 func routerFixture(t *testing.T, opts ...fakesink.Option) (*AckTracker, *Router, map[string]*fakesink.Sink) {
 	t.Helper()
 	tr := newTracker(t, 100)

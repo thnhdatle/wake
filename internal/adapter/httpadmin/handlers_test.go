@@ -19,7 +19,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil"
 )
 
-// serve starts a server with opts on a loopback port and returns its address.
 func serve(t *testing.T, opts ...httpadmin.Option) (string, *httpadmin.Server) {
 	t.Helper()
 	reg := prometheus.NewRegistry()

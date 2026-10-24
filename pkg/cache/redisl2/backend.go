@@ -25,10 +25,7 @@ type Backend struct {
 
 var _ l2.Backend = (*Backend)(nil)
 
-// New returns a backend for cfg.Namespace on client and starts its bus
-// goroutine, which Close stops. It does no I/O: the subscription connects
-// in the background and reports EventConnected once active, so New succeeds
-// while Redis is unreachable. client stays owned by the caller.
+// New returns a backend for cfg.Namespace on client and starts its bus goroutine.
 func New(client redis.UniversalClient, cfg l2.Config) (*Backend, error) {
 	if client == nil {
 		return nil, fmt.Errorf("nil client: %w", errInvalidConfig)
@@ -83,15 +80,10 @@ func (b *Backend) Invalidate(ctx context.Context, req l2.InvalidateRequest) (l2.
 		millis(req.GenTTL), b.channel, invalidatePrefix(req.Epoch), req.Key)
 }
 
-// invalidatePrefix is the part of "i|<epoch>|<gen>|<key>" known before the
-// script runs; the script appends the new generation and the key.
 func invalidatePrefix(epoch uint64) string {
 	return "i|" + strconv.FormatUint(epoch, 10) + "|"
 }
 
-// writeWithEpoch runs a generation-incrementing script and, in the same
-// pipeline, GETs the namespace epoch (another slot on Cluster, so not
-// atomic with the script). A missing epoch is initialized by Epoch.
 func (b *Backend) writeWithEpoch(ctx context.Context, op, key string, s *redis.Script, keys []string, args ...any) (
 	l2.WriteResult, error,
 ) {
@@ -120,9 +112,6 @@ func (b *Backend) writeWithEpoch(ctx context.Context, op, key string, s *redis.S
 	return res, nil
 }
 
-// evalWithEpoch pipelines EVALSHA and GET <ns>:epoch, repeating both with
-// EVAL when the script cache is empty (NOSCRIPT means the script did not
-// run, so repeating it is safe).
 func (b *Backend) evalWithEpoch(ctx context.Context, s *redis.Script, keys []string, args []any) (
 	*redis.Cmd, *redis.StringCmd,
 ) {
@@ -131,7 +120,7 @@ func (b *Backend) evalWithEpoch(ctx context.Context, s *redis.Script, keys []str
 		pipe := b.client.Pipeline()
 		cmd := eval(pipe)
 		epochCmd := pipe.Get(ctx, epochKey)
-		_, _ = pipe.Exec(ctx) // each command's own error is inspected by the caller
+		_, _ = pipe.Exec(ctx)
 		return cmd, epochCmd
 	}
 	cmd, epochCmd := exec(func(p redis.Pipeliner) *redis.Cmd { return s.EvalSha(ctx, p, keys, args...) })
@@ -141,7 +130,7 @@ func (b *Backend) evalWithEpoch(ctx context.Context, s *redis.Script, keys []str
 	return cmd, epochCmd
 }
 
-// Lock implements l2.Locker with SET <lock> token NX PX ttl.
+// Lock implements l2.Locker.
 func (b *Backend) Lock(ctx context.Context, epoch uint64, key, token string, ttl time.Duration) (bool, error) {
 	_, _, l := l2.KeyNames(b.ns, epoch, key)
 	ok, err := b.client.SetNX(ctx, l, token, time.Duration(millis(ttl))*time.Millisecond).Result()
@@ -185,8 +174,7 @@ func (b *Backend) BumpEpoch(ctx context.Context) (uint64, error) {
 // Receive implements l2.Bus.
 func (b *Backend) Receive(ctx context.Context) (l2.Event, error) { return b.bus.receive(ctx) }
 
-// Close implements l2.Bus: it stops the bus goroutine and closes the
-// subscription connection, but not the client. It is idempotent.
+// Close implements l2.Bus and stops the bus goroutine.
 func (b *Backend) Close() error {
 	b.bus.close()
 	return nil

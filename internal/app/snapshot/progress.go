@@ -14,14 +14,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// maxPendingChunks bounds the emitted chunks of one table whose `r` events
-// are not all acknowledged yet; at the bound the copy waits for the oldest.
 const maxPendingChunks = 16
 
-// chunkProgress tracks one table's chunks from emission to acknowledgement
-// and persists the progress: the position is the upper key of the
-// latest chunk complete together with all earlier ones (watermark.Progress)
-// and rows counts the rows of those chunks.
 type chunkProgress struct {
 	keeper   *StateKeeper
 	metrics  Metrics
@@ -49,9 +43,6 @@ func newChunkProgress(k *StateKeeper, m Metrics, run uint64, tp *pipeline.TableP
 	return p
 }
 
-// add registers an emitted chunk whose group completes on done, then
-// persists whatever completed meanwhile; it waits for the oldest chunk while
-// maxPendingChunks are pending.
 func (p *chunkProgress) add(ctx context.Context, chunk uint64, upper json.RawMessage, rows uint64,
 	done <-chan struct{},
 ) error {
@@ -76,8 +67,6 @@ func (p *chunkProgress) wait(ctx context.Context, c *pendingChunk) error {
 	}
 }
 
-// poll completes the acknowledged chunks and persists the progress when it
-// advanced.
 func (p *chunkProgress) poll(ctx context.Context) error {
 	before := p.progress.Pending()
 	for i := range p.pending {
@@ -110,8 +99,6 @@ func (p *chunkProgress) poll(ctx context.Context) error {
 	return p.keeper.setProgress(ctx, p.run, p.table, pos, p.rows, false)
 }
 
-// finish waits until every chunk is acknowledged, persisting the progress
-// as chunks complete, and marks the table done.
 func (p *chunkProgress) finish(ctx context.Context) error {
 	for len(p.pending) > 0 {
 		if err := p.wait(ctx, &p.pending[0]); err != nil {
@@ -125,8 +112,6 @@ func (p *chunkProgress) finish(ctx context.Context) error {
 	return p.keeper.setProgress(ctx, p.run, p.table, pos, p.rows, true)
 }
 
-// readRecord returns the `r` event record of a chunk row: no
-// tx_id, before null.
 func readRecord(id change.ID, t *Table, tsMs int64, row *pipeline.ChunkRow, version uint64) pipeline.Record {
 	ev := change.Event{
 		ID: id, Source: t.Source, Op: change.OpRead, TsMs: tsMs, Key: row.Key, After: row.After,
@@ -135,9 +120,6 @@ func readRecord(id change.ID, t *Table, tsMs int64, row *pipeline.ChunkRow, vers
 	return pipeline.NewEventRecord(&ev)
 }
 
-// routeChunk routes the rows at positions keep (all rows when keep is nil)
-// as `r` events into a new group of tx, seals the group and returns it.
-// Row i gets the id at the chunk's LSN with n = chunk × chunk_rows + i.
 func routeChunk(ctx context.Context, tx pipeline.HeldTx, c *chunkEmit) (pipeline.TxGroup, error) {
 	g, err := tx.NewGroup(c.readAt)
 	if err != nil {
@@ -173,7 +155,6 @@ func routeChunk(ctx context.Context, tx pipeline.HeldTx, c *chunkEmit) (pipeline
 	return g, nil
 }
 
-// chunkEmit describes the `r` events of one chunk.
 type chunkEmit struct {
 	table     *Table
 	run       uint64

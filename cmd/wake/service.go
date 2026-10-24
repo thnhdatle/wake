@@ -18,7 +18,6 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/metrics"
 )
 
-// wiring are the inputs of wirePipeline.
 type wiring struct {
 	cfg     config.Config
 	dsn     string
@@ -30,7 +29,6 @@ type wiring struct {
 	hup     <-chan os.Signal
 }
 
-// collectors are the metrics adapters of the app layer.
 type collectors struct {
 	lag      *metrics.Lag
 	reader   *metrics.Reader
@@ -59,29 +57,26 @@ func newCollectors(reg prometheus.Registerer) (*collectors, error) {
 	return &c, nil
 }
 
-// service is the wired pipeline of `wake run`.
 type service struct {
-	cfg       *config.Config
-	log       *slog.Logger
-	clk       clock.Clock
-	src       *source
-	repl      *replActivity
-	sinks     []sinkEntry
-	plan      *snapshot.Plan
-	keeper    *snapshot.StateKeeper
-	tracker   *stream.AckTracker
-	status    *stream.StatusUpdater
-	initial   *snapshot.Initial
-	snap      *snapshot.Snapshotter
-	reader    *stream.Reader
-	monitor   *lag.Monitor
-	heartbeat *lag.Heartbeat
-	refresher *refresher
-	// readerRunning is true while Reader.Run runs (readiness).
+	cfg           *config.Config
+	log           *slog.Logger
+	clk           clock.Clock
+	src           *source
+	repl          *replActivity
+	sinks         []sinkEntry
+	plan          *snapshot.Plan
+	keeper        *snapshot.StateKeeper
+	tracker       *stream.AckTracker
+	status        *stream.StatusUpdater
+	initial       *snapshot.Initial
+	snap          *snapshot.Snapshotter
+	reader        *stream.Reader
+	monitor       *lag.Monitor
+	heartbeat     *lag.Heartbeat
+	refresher     *refresher
 	readerRunning atomic.Bool
 }
 
-// close releases the source connections once run returned.
 func (s *service) close(ctx context.Context) {
 	if err := s.src.close(ctx); err != nil {
 		s.log.Warn("close source connections", "component", "main", "error", err)

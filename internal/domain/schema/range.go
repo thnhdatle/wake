@@ -4,16 +4,11 @@ package schema
 
 import "bytes"
 
-// rangeBound is one parsed bound; infinite reports an omitted (unbounded)
-// side, which is distinct from a bound whose value is 'infinity'.
 type rangeBound struct {
 	value    []byte
 	infinite bool
 }
 
-// appendRange converts range output ("[1,10)", "(,5]", "empty") to
-// {"lower":L,"upper":U,"lower_inc":b,"upper_inc":b} with bounds mapped by
-// the bound type, null for an unbounded side, or {"empty":true}.
 func appendRange(dst []byte, typeOID uint32, info typeInfo, text []byte) ([]byte, error) {
 	out, n, err := appendRangeAt(dst, typeOID, info.elem, text, text)
 	if err != nil {
@@ -25,8 +20,6 @@ func appendRange(dst []byte, typeOID uint32, info typeInfo, text []byte) ([]byte
 	return out, nil
 }
 
-// appendMultirange converts multirange output ("{[1,3),[5,7)}", "{}") to a
-// JSON array of range objects.
 func appendMultirange(dst []byte, typeOID uint32, info typeInfo, text []byte) ([]byte, error) {
 	bound, _ := ElementType(info.elem)
 	s := bytes.TrimSpace(text)
@@ -56,8 +49,6 @@ func appendMultirange(dst []byte, typeOID uint32, info typeInfo, text []byte) ([
 	return append(dst, ']'), nil
 }
 
-// appendRangeAt converts the range at the start of s and returns the number
-// of bytes consumed. text is the whole value, for error messages.
 func appendRangeAt(dst []byte, typeOID, bound uint32, s, text []byte) ([]byte, int, error) {
 	const empty = "empty"
 	if len(s) >= len(empty) && bytes.EqualFold(s[:len(empty)], []byte(empty)) {
@@ -103,9 +94,6 @@ func appendBoolField(dst []byte, v bool) []byte {
 	return append(dst, "false"...)
 }
 
-// scanBound reads a bound starting at s[pos] up to an unquoted ',', ')' or
-// ']' and returns the position of that terminator. It returns a sub-slice of
-// s when the bound has no quotes or escapes.
 func scanBound(s []byte, pos int) (rangeBound, int, bool) {
 	if pos < len(s) && isBoundEnd(s[pos]) {
 		return rangeBound{infinite: true}, pos, true
@@ -121,9 +109,6 @@ func scanBound(s []byte, pos int) (rangeBound, int, bool) {
 	return rangeBound{}, len(s), false
 }
 
-// unescapeBound is the slow path of scanBound: inside double quotes "" is a
-// literal quote, and a backslash escapes the next byte everywhere
-// (range_parse_bound).
 func unescapeBound(s []byte, pos int) (rangeBound, int, bool) {
 	out := make([]byte, 0, len(s)-pos)
 	inQuote := false

@@ -17,19 +17,14 @@ const (
 	pollMax     = 500 * time.Millisecond
 )
 
-// loadCall is one in-process leader's miss on key with L2 usable:
-// read L2 → lock → (holder) re-check, load, generation-checked fill →
-// (waiter) wait for "loaded" or poll until lock_timeout, then fall back.
 type loadCall[V any] struct {
 	c     *cache[V]
 	key   string
 	load  LoadFunc[V]
-	tok   l1.Token // captured before the first L2 read (L1 guard)
+	tok   l1.Token
 	epoch uint64
 }
 
-// attemptResult tells run whether an attempt finished and, if not, the
-// generation seen by its L2 read.
 type attemptResult[V any] struct {
 	it   item[V]
 	err  error
@@ -42,8 +37,6 @@ func (lc *loadCall[V]) run(ctx context.Context) (item[V], error) {
 	var deadline <-chan time.Time
 	backoff := pollInitial
 	for {
-		// Watch before reading so a "loaded" published after the read is
-		// not missed.
 		loaded, release := c.signals.watch(lc.key)
 		res := lc.attempt(ctx, deadline == nil)
 		if res.done {
@@ -70,7 +63,6 @@ func (lc *loadCall[V]) run(ctx context.Context) (item[V], error) {
 	}
 }
 
-// attempt reads L2 and tries to take the load lock once.
 func (lc *loadCall[V]) attempt(ctx context.Context, first bool) attemptResult[V] {
 	c := lc.c
 	r, err := c.backend.Read(ctx, lc.readRequest())
@@ -105,8 +97,6 @@ func (lc *loadCall[V]) readRequest() l2.ReadRequest {
 	return l2.ReadRequest{Epoch: lc.epoch, Key: lc.key, GenTTL: lc.c.genTTL(0)}
 }
 
-// hit decodes a valid L2 value and populates L1 through the guard. An
-// undecodable value is treated as a miss and overwritten by the load.
 func (lc *loadCall[V]) hit(r l2.ReadResult) (item[V], bool) {
 	if !r.Hit {
 		return item[V]{}, false
@@ -120,7 +110,6 @@ func (lc *loadCall[V]) hit(r l2.ReadResult) (item[V], bool) {
 	return it, true
 }
 
-// holder runs with the load lock held: re-check L2, then load and fill.
 func (lc *loadCall[V]) holder(ctx context.Context, token string) (item[V], error) {
 	c := lc.c
 	r, err := c.backend.Read(ctx, lc.readRequest())
@@ -136,10 +125,6 @@ func (lc *loadCall[V]) holder(ctx context.Context, token string) (item[V], error
 	return lc.loadAndFill(ctx, r.Gen, token)
 }
 
-// loadAndFill calls the loader and writes the result only if the
-// generation is still gen (captured before the loader ran). A rejected
-// write still returns the loaded value but caches nothing. token releases
-// the lock (empty for fallback loads).
 func (lc *loadCall[V]) loadAndFill(ctx context.Context, gen uint64, token string) (item[V], error) {
 	c := lc.c
 	c.m.loads.Inc()
@@ -172,7 +157,6 @@ func (lc *loadCall[V]) loadAndFill(ctx context.Context, gen uint64, token string
 	return it, notFoundIf(it)
 }
 
-// unlock releases the lock held with token, even if ctx was canceled.
 func (lc *loadCall[V]) unlock(ctx context.Context, token string) {
 	if token == "" {
 		return

@@ -15,15 +15,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2fake"
 )
 
-// TestCache_Protocol_InvalidationProperty checks the consistency invariants
-// of the generation and epoch guard over every interleaving of one read
-// with one write: a row update followed by Delete (from any instance) is
-// injected before or after any L2 operation of the reading instance, with the reader's bus either
-// prompt or delayed. Invariants:
-//   - the read returns a value at least as new as the row when it started;
-//   - a read started on the reader's instance after the write became
-//     visible there returns the new value;
-//   - once the bus is drained, no instance (L1 or L2) holds a stale value.
 func TestCache_Protocol_InvalidationProperty(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(rt *rapid.T) {
@@ -51,7 +42,7 @@ func TestCache_Protocol_InvalidationProperty(t *testing.T) {
 		if got < startRow {
 			rt.Fatalf("read returned %d, row was %d when it started", got, startRow)
 		}
-		pc.inject(context.Background()) // the hook point was not reached: write after the read
+		pc.inject(context.Background())
 		reader.cli.SetHooks(l2fake.Hooks{})
 		reader.cli.ResumeBus()
 		if v := <-pc.inner; v < pc.committed {
@@ -62,19 +53,17 @@ func TestCache_Protocol_InvalidationProperty(t *testing.T) {
 	})
 }
 
-// protoCase is one drawn interleaving of TestCache_Protocol_InvalidationProperty.
 type protoCase struct {
-	rt     *rapid.T
-	nodes  []node
-	r, w   int       // reader and writer instances
-	op     l2fake.Op // reader operation around which the write is injected
-	after  bool      // inject after (true) or before op
-	prompt bool      // the reader's bus delivers at once
-	inner  chan int  // result of a read started after the write was visible
-	fired  atomic.Bool
-	dbMu   sync.Mutex // protects row
-	row    int
-	// committed is the row version written by the injection.
+	rt        *rapid.T
+	nodes     []node
+	r, w      int
+	op        l2fake.Op
+	after     bool
+	prompt    bool
+	inner     chan int
+	fired     atomic.Bool
+	dbMu      sync.Mutex
+	row       int
 	committed int
 }
 
@@ -102,8 +91,6 @@ func (pc *protoCase) hooks() l2fake.Hooks {
 	}
 }
 
-// inject commits a row update and invalidates it through the writer; when
-// the write is visible on the reader it starts a second read there.
 func (pc *protoCase) inject(ctx context.Context) {
 	if !pc.fired.CompareAndSwap(false, true) {
 		return
@@ -114,7 +101,7 @@ func (pc *protoCase) inject(ctx context.Context) {
 	pc.dbMu.Unlock()
 	require.NoError(pc.rt, pc.nodes[pc.w].Delete(ctx, "k"))
 	if !pc.prompt && pc.w != pc.r {
-		pc.inner <- pc.committed // not yet visible on the reader: nothing to check
+		pc.inner <- pc.committed
 		return
 	}
 	if pc.prompt {
@@ -123,13 +110,12 @@ func (pc *protoCase) inject(ctx context.Context) {
 		}
 	}
 	reader := pc.nodes[pc.r]
-	go func() { // visible on the reader: a new read must see it
+	go func() {
 		v, _ := reader.GetOrLoad(ctx, "k", pc.load)
 		pc.inner <- v
 	}()
 }
 
-// warm puts the key into L2 and/or the reader's L1 and optionally expires it.
 func warm(rt *rapid.T, e *env, nodes []node, r int, load LoadFunc[int]) {
 	ctx := context.Background()
 	if rapid.Bool().Draw(rt, "warmL2") {

@@ -17,7 +17,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Replication protocol message bytes (CopyData payloads).
 const (
 	msgXLogData        = 'w'
 	msgKeepalive       = 'k'
@@ -29,10 +28,7 @@ const (
 	pgEpochUnixSeconds = 946_684_800
 )
 
-// StartReplication implements pipeline.ReplicationSource. It must be the
-// next command after CreateSlot when the exported snapshot is in use. A slot
-// with an active consumer is slot_in_use (naming its PID); an invalidated
-// slot is slot_invalidated.
+// StartReplication starts streaming from a slot.
 func (c *Conn) StartReplication(ctx context.Context, opts pipeline.StartOptions) error {
 	sql, err := startCommand(&opts)
 	if err != nil {
@@ -53,8 +49,6 @@ func (c *Conn) StartReplication(ctx context.Context, opts pipeline.StartOptions)
 	return nil
 }
 
-// startReplication sends the command and waits for CopyBothResponse. On an
-// ErrorResponse it reads up to ReadyForQuery so the connection stays usable.
 func startReplication(ctx context.Context, conn *pgconn.PgConn, sql string) error {
 	conn.Frontend().SendQuery(&pgproto3.Query{String: sql})
 	if err := conn.Frontend().Flush(); err != nil {
@@ -83,30 +77,26 @@ func startReplication(ctx context.Context, conn *pgconn.PgConn, sql string) erro
 	}
 }
 
-// mapStartError translates a START_REPLICATION failure, reading the slot
-// row to name the active PID or confirm the invalidation.
 func (c *Conn) mapStartError(ctx context.Context, conn *pgconn.PgConn, slot string, err error) error {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
 		return err
 	}
 	switch pgErr.Code {
-	case "55006": // object_in_use: "replication slot is active for PID n"
+	case "55006":
 		row, _ := lookupSlot(ctx, conn, slot) //nolint:errcheck // the PID is best effort
 		return slotInUseError(slot, row.activePID, err)
-	case "55000": // object_not_in_prerequisite_state, e.g. an invalidated slot
+	case "55000":
 		if row, lerr := lookupSlot(ctx, conn, slot); lerr == nil && row.walStatus == "lost" {
 			return slotInvalidatedError(slot, err)
 		}
-	case "42704": // undefined_object
+	case "42704":
 		return fmt.Errorf("%w: %s: %w", ErrSlotNotFound, slot, err)
 	}
 	return fmt.Errorf("pgrepl: start replication on slot %s: %w", slot, err)
 }
 
-// Receive implements pipeline.ReplicationSource. XLogData.Data aliases the
-// connection's read buffer and is valid until the next Receive. When ctx
-// ends, Receive returns its error and the connection stays usable.
+// Receive returns the next replication message.
 func (c *Conn) Receive(ctx context.Context) (pipeline.ReplicationMessage, error) {
 	conn, err := c.streamingConn()
 	if err != nil {
@@ -139,7 +129,6 @@ func (c *Conn) Receive(ctx context.Context) (pipeline.ReplicationMessage, error)
 	}
 }
 
-// parseCopyData decodes an XLogData or primary keepalive message.
 func parseCopyData(data []byte) (pipeline.ReplicationMessage, error) {
 	if len(data) == 0 {
 		return pipeline.ReplicationMessage{}, fmt.Errorf("%w: empty CopyData", ErrProtocol)
@@ -169,9 +158,7 @@ func parseCopyData(data []byte) (pipeline.ReplicationMessage, error) {
 	return pipeline.ReplicationMessage{}, fmt.Errorf("%w: CopyData type %q", ErrProtocol, data[0])
 }
 
-// SendStandbyStatus implements pipeline.StandbyStatusSender. It may run
-// while another goroutine is blocked in Receive. Flushed is also reported
-// as the applied position; a zero ClientTime means now.
+// SendStandbyStatus reports the flushed position to the server.
 func (c *Conn) SendStandbyStatus(ctx context.Context, st pipeline.StandbyStatus) error {
 	conn, err := c.streamingConn()
 	if err != nil {
@@ -196,8 +183,6 @@ func (c *Conn) SendStandbyStatus(ctx context.Context, st pipeline.StandbyStatus)
 		return fmt.Errorf("pgrepl: send standby status: %w", err)
 	}
 	if _, err := nc.Write(buf); err != nil {
-		// A partial or timed-out write leaves the protocol stream (and TLS
-		// state) corrupt: give up the connection.
 		c.breakStream(conn)
 		return fmt.Errorf("pgrepl: send standby status: %w", err)
 	}
@@ -208,9 +193,6 @@ func (c *Conn) SendStandbyStatus(ctx context.Context, st pipeline.StandbyStatus)
 	return nil
 }
 
-// encodeStatus encodes a standby status update as a CopyData message:
-// 'd', length, 'r', written, flushed, applied (= flushed), client time
-// (microseconds since 2000-01-01) and the reply flag.
 func encodeStatus(st *pipeline.StandbyStatus) []byte {
 	buf := make([]byte, 0, copyDataHeaderLen+statusPayloadLen)
 	buf = append(buf, 'd')
@@ -226,12 +208,10 @@ func encodeStatus(st *pipeline.StandbyStatus) []byte {
 	return append(buf, 0)
 }
 
-// pgTime converts microseconds since 2000-01-01 UTC.
 func pgTime(us int64) time.Time {
 	return time.Unix(pgEpochUnixSeconds, 0).Add(time.Duration(us) * time.Microsecond).UTC()
 }
 
-// pgMicros converts to microseconds since 2000-01-01 UTC.
 func pgMicros(t time.Time) int64 {
 	return t.Sub(time.Unix(pgEpochUnixSeconds, 0)).Microseconds()
 }

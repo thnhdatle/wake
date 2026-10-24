@@ -53,8 +53,6 @@ func TestClient_Read_InitializesGenerationFromTime(t *testing.T) {
 	r2, err := cli.Read(ctx, l2.ReadRequest{Epoch: 1, Key: "k", GenTTL: time.Minute})
 	require.NoError(t, err)
 	assert.Equal(t, r1.Gen, r2.Gen)
-	// A second key initialized at the same clock reading still gets a
-	// strictly larger TIME.
 	r3, err := cli.Read(ctx, l2.ReadRequest{Epoch: 1, Key: "other", GenTTL: time.Minute})
 	require.NoError(t, err)
 	assert.Greater(t, r3.Gen, r1.Gen)
@@ -184,7 +182,7 @@ func TestClient_Epoch_InitAndBump(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, e+1, e2)
 	assert.Equal(t, l2.Event{Kind: l2.EventEpoch, Epoch: e2}, recv(t, cli))
-	srv.Delete(l2.EpochKey(ns)) // evicted: re-initialized from TIME, never going back
+	srv.Delete(l2.EpochKey(ns))
 	e3, err := cli.Epoch(ctx)
 	require.NoError(t, err)
 	assert.Greater(t, e3, uint64(start.UnixMicro()))
@@ -349,9 +347,6 @@ func TestServer_RawSet_CorruptValueIsMiss(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// Generations never repeat: whatever sequence of reads, invalidations,
-// expiries and evictions happens, every generation observed for a key is
-// strictly greater than every generation previously handed out for it.
 func TestClient_Generation_NeverRepeatsProperty(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(rt *rapid.T) {

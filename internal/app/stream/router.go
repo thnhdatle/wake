@@ -12,49 +12,26 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// SinkRoute is one configured sink with its `tables` globs.
 type SinkRoute struct {
-	Sink pipeline.Sink
-	// Tables are the sink's globs per pipeline.TableFilter; empty routes no
-	// table.
+	Sink   pipeline.Sink
 	Tables []string
 }
 
-// Router routes records to sinks and registers each delivery
-// with the ack tracker before handing the record to the sink:
-//
-//   - an event goes to every sink whose globs match its "<schema>.<table>";
-//   - a schema-change event goes to the sinks that receive its table;
-//   - a forwarded message goes to every sink with at least one glob (a sink
-//     with `tables: []` receives nothing).
-//
-// Each sink receives its own copy of the record with its own AckHandle; the
-// payload and key bytes are shared. Per-key order per sink follows call
-// order: callers route records in seq order, Router hands them to every sink
-// in that order, and sinks keep per-partition-key order (LaneScheduler,
-// Kafka partitions, NATS subjects). Send blocks while a sink's buffer is
-// full, which stops the caller (backpressure).
-//
-// Router is safe for concurrent use. It caches the sink list per table; the
-// cache holds one entry per captured table.
+// Router routes records to sinks and registers each delivery with the ack tracker.
 type Router struct {
 	tracker  *AckTracker
 	sinks    []pipeline.Sink
 	filters  []pipeline.TableFilter
-	messages []int // sinks that receive forwarded messages
+	messages []int
 
-	mu    sync.RWMutex // protects cache and bySource
-	cache map[string][]int
-	// bySource caches cache's entries by schema and table, so routing an
-	// event does not build its "<schema>.<table>" name.
+	mu       sync.RWMutex
+	cache    map[string][]int
 	bySource map[tableKey][]int
 }
 
-// tableKey is a table by its CDC event schema and table name.
 type tableKey struct{ schema, table string }
 
-// NewRouter validates the routes: every sink non-nil with a unique name and
-// valid globs.
+// NewRouter validates the routes.
 func NewRouter(tracker *AckTracker, routes []SinkRoute) (*Router, error) {
 	if tracker == nil {
 		return nil, fmt.Errorf("%w: nil ack tracker", ErrInvalidOption)
@@ -83,7 +60,6 @@ func NewRouter(tracker *AckTracker, routes []SinkRoute) (*Router, error) {
 	return r, nil
 }
 
-// SinkNames returns the names of the sinks that receive the table's events.
 func (r *Router) SinkNames(table string) []string {
 	idx := r.tableSinks(table)
 	names := make([]string, len(idx))
@@ -93,22 +69,16 @@ func (r *Router) SinkNames(table string) []string {
 	return names
 }
 
-// Route delivers rec, outside any group, to its sinks as part of tx. It
-// returns the number of sinks it was handed to; zero means unrouted. If ctx
-// ends while a sink blocks, the deliveries already registered stay pending,
-// so tx is never confirmed (the process is shutting down).
+// Route delivers rec to its sinks as part of tx.
 func (r *Router) Route(ctx context.Context, tx TxHandle, rec pipeline.Record) (int, error) {
 	return r.route(ctx, rec, func() (pipeline.AckToken, error) { return r.tracker.Add(tx) })
 }
 
-// RouteToGroup delivers rec to its sinks as part of group g (a snapshot
-// chunk's `r` events).
 func (r *Router) RouteToGroup(ctx context.Context, g Group, rec pipeline.Record) (int, error) {
 	return r.route(ctx, rec, func() (pipeline.AckToken, error) { return r.tracker.AddToGroup(g) })
 }
 
-// Dispatch registers an assembled transaction, routes its records in order
-// and seals it.
+// Dispatch registers an assembled transaction, routes its records in order and seals it.
 func (r *Router) Dispatch(ctx context.Context, b *pipeline.TxBatch, readAt time.Time) (TxHandle, error) {
 	tx, err := r.tracker.Begin(ctx, b.CommitLSN, b.EndLSN, readAt)
 	if err != nil {

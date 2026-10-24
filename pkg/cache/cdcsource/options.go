@@ -14,14 +14,10 @@ import (
 
 // Defaults of the options.
 const (
-	// DefaultRetryMin is the first delay before retrying a failed Delete.
-	DefaultRetryMin = 100 * time.Millisecond
-	// DefaultRetryMax caps the delay between Delete retries.
-	DefaultRetryMax = 5 * time.Second
-	// DefaultDeleteTimeout bounds one Delete call.
+	DefaultRetryMin      = 100 * time.Millisecond
+	DefaultRetryMax      = 5 * time.Second
 	DefaultDeleteTimeout = 30 * time.Second
-	// maxKeysPerDelete bounds the keys passed to one Delete call.
-	maxKeysPerDelete = 256
+	maxKeysPerDelete     = 256
 )
 
 // Option configures New.
@@ -50,7 +46,7 @@ func defaultOptions() options {
 	}
 }
 
-// WithLogger sets the logger (default: discard).
+// WithLogger sets the logger.
 func WithLogger(l *slog.Logger) Option {
 	return func(o *options) error {
 		if l == nil {
@@ -61,8 +57,7 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
-// WithMetrics registers the wake_cdcsource_* metrics on reg (default: not
-// exported). Several invalidators may share reg; they then share counters.
+// WithMetrics registers the wake_cdcsource_* metrics on reg.
 func WithMetrics(reg prometheus.Registerer) Option {
 	return func(o *options) error {
 		o.reg = reg
@@ -70,8 +65,7 @@ func WithMetrics(reg prometheus.Registerer) Option {
 	}
 }
 
-// WithInvalidateOnSnapshot makes snapshot reads (op r) invalidate their keys
-// (default false: a re-snapshot would flood the cache with invalidations).
+// WithInvalidateOnSnapshot makes snapshot reads invalidate their keys.
 func WithInvalidateOnSnapshot(enabled bool) Option {
 	return func(o *options) error {
 		o.onSnapshot = enabled
@@ -79,7 +73,7 @@ func WithInvalidateOnSnapshot(enabled bool) Option {
 	}
 }
 
-// WithClock sets the time source of retry waits (default: system clock).
+// WithClock sets the time source of retry waits.
 func WithClock(c cache.Clock) Option {
 	return func(o *options) error {
 		if c == nil {
@@ -90,8 +84,7 @@ func WithClock(c cache.Clock) Option {
 	}
 }
 
-// WithRand sets the random source of the retry jitter (default: randomly
-// seeded). Tests pass a seeded generator for deterministic delays.
+// WithRand sets the random source of the retry jitter.
 func WithRand(r *rand.Rand) Option {
 	return func(o *options) error {
 		if r == nil {
@@ -102,10 +95,7 @@ func WithRand(r *rand.Rand) Option {
 	}
 }
 
-// WithRetry sets the delay before the first Delete retry and the cap of the
-// exponential backoff (defaults DefaultRetryMin and DefaultRetryMax). Each
-// delay is drawn uniformly from [d/2, d] where d doubles per attempt up to
-// maxDelay.
+// WithRetry sets the first retry delay and the backoff cap of Delete retries.
 func WithRetry(minDelay, maxDelay time.Duration) Option {
 	return func(o *options) error {
 		if minDelay <= 0 || maxDelay < minDelay {
@@ -116,7 +106,7 @@ func WithRetry(minDelay, maxDelay time.Duration) Option {
 	}
 }
 
-// WithDeleteTimeout bounds each Delete call (default DefaultDeleteTimeout).
+// WithDeleteTimeout bounds each Delete call.
 func WithDeleteTimeout(d time.Duration) Option {
 	return func(o *options) error {
 		if d <= 0 {
@@ -127,7 +117,6 @@ func WithDeleteTimeout(d time.Duration) Option {
 	}
 }
 
-// systemClock is the default clock.
 type systemClock struct{}
 
 func (systemClock) Now() time.Time                         { return time.Now() }

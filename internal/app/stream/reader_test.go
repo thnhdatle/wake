@@ -96,16 +96,12 @@ func TestReader_Run_ConfirmedAdvancesOnlyAfterAcks(t *testing.T) {
 	recs := f.sink.Received()
 	require.Len(t, recs, 10)
 	assert.Equal(t, lsn.LSN(0x1000), f.tracker.Confirmed(), "nothing acknowledged yet")
-	// Acknowledging the first transaction's record confirms its end LSN.
 	_, err := f.sink.AckNext(1)
 	require.NoError(t, err)
 	assert.Equal(t, mustLSN(t, "0/197CEC8"), f.tracker.Confirmed())
-	// Out-of-order acknowledgements never skip the gap.
 	require.NoError(t, f.sink.AckAt(2))
 	assert.Equal(t, mustLSN(t, "0/197CEC8"), f.tracker.Confirmed())
 	require.NoError(t, f.sink.AckAll())
-	// The keyless transaction is unrouted (skipped table) and counts as
-	// acknowledged at Commit, so the last end LSN is confirmed.
 	assert.Equal(t, mustLSN(t, "0/197D4C0"), f.tracker.Confirmed())
 }
 
@@ -185,8 +181,6 @@ func TestReader_Run_GateHoldsAndPausesUntilReleased(t *testing.T) {
 	f.start(t)
 	f.push(t, msgs...)
 	ctx := context.Background()
-	// Reading pauses once the held-back transactions reach max_tx_bytes:
-	// the script is not drained and nothing reaches the sink.
 	pushed := make(chan error, 1)
 	go func() {
 		pushed <- f.src.Push(ctx, pipeline.ReplicationMessage{Kind: pipeline.ReplicationMessageKeepalive})
@@ -210,8 +204,6 @@ func TestReader_Run_GateReleasedWhileIdleFlushes(t *testing.T) {
 	})
 	f.start(t)
 	f.push(t, readRecorded(t, "types.hex")...)
-	// The reader is now blocked in Receive with transactions held back; the
-	// release alone dispatches them.
 	gate.release()
 	require.NoError(t, f.sink.WaitReceived(context.Background(), 3))
 	require.ErrorIs(t, f.finish(t), fakerepl.ErrClosed)
@@ -224,8 +216,6 @@ func TestReader_Run_SkipsTransactionsBeforeStart(t *testing.T) {
 		cfg:      ReaderConfig{Start: mustLSN(t, "0/197D7B0"), EmitTruncate: true, EmitMessages: true},
 		sinkOpts: []fakesink.Option{fakesink.WithAutoAck()},
 	}, msgs)
-	// The first transaction and the non-transactional message precede the
-	// start; the heartbeat transaction starts exactly at it.
 	assert.Equal(t, []string{"0/197DDB0-0"}, ids(recs))
 }
 
@@ -237,7 +227,6 @@ func TestReader_Run_Metrics(t *testing.T) {
 	msgs = append(msgs, readRecorded(t, "types.hex")...)
 	msgs = append(msgs, readRecorded(t, "identity.hex")...)
 	msgs = append(msgs, readRecorded(t, "multi.hex")...)
-	// The keyless table again: its skip is logged and counted once only.
 	s := synth{at: 0x2000000}
 	s.begin(0x2000100, 900)
 	s.relation(16425, "rec", "keyless", 'n', "b")
@@ -310,7 +299,6 @@ func TestReader_Run_UnknownReplicationKind(t *testing.T) {
 	require.ErrorIs(t, f.finish(t), ErrProtocol)
 }
 
-// beginSignal closes began at the first ObserveBegin.
 type beginSignal struct {
 	fakeObserver
 	began chan struct{}
@@ -361,7 +349,6 @@ func TestReader_Run_SchemaVersionsPersistedAfterConfirm(t *testing.T) {
 	require.NoError(t, f.sink.WaitReceived(context.Background(), 9))
 	assert.Empty(t, store.Saved(), "nothing confirmed yet")
 	require.NoError(t, f.sink.AckAll())
-	// The next message lets the reader see the confirmed LSN.
 	require.NoError(t, f.src.Push(context.Background(), pipeline.ReplicationMessage{
 		Kind: pipeline.ReplicationMessageKeepalive,
 	}))
@@ -426,9 +413,9 @@ func TestReader_Run_ObserverSeesTransactionsInOrder(t *testing.T) {
 	s.relation(1, "public", "users", 'd', "v")
 	s.relation(2, "public", "other", 'n', "v")
 	s.insert(1, "1", "a")
-	s.insert(2, "9", "z")                                 // keyless table, skipped
-	s.update(1, 'K', []string{"1", "\x00null"}, "2", "b") // key change 1 -> 2
-	s.update(1, 0, nil, "2", "c")                         // key unchanged
+	s.insert(2, "9", "z")
+	s.update(1, 'K', []string{"1", "\x00null"}, "2", "b")
+	s.update(1, 0, nil, "2", "c")
 	s.delete(1, "2", "\x00null")
 	s.truncate(1, 2)
 	s.message(true, 0x0FF0, "wake.watermark", `{"w":1}`)

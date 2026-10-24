@@ -76,8 +76,6 @@ func rowJSON(r change.Row) string {
 	return string(append(b, '}'))
 }
 
-// readAll reads a table to the end in chunks of limit rows and returns
-// every row's after image as JSON with the chunks.
 func readAll(t *testing.T, read func(pipeline.ChunkRequest) (pipeline.Chunk, error), schema, table string,
 	limit int,
 ) ([]string, []pipeline.Chunk) {

@@ -12,24 +12,14 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Options controls how a configuration is assembled. Precedence, highest
-// first: Overrides (CLI flags), Env, the file, defaults.
 type Options struct {
-	// Path of the YAML file; empty means no file.
-	Path string
-	// Env looks up environment variables (os.LookupEnv in the binary); nil
-	// disables env overrides.
-	Env func(key string) (string, bool)
-	// Overrides maps dotted key paths ("admin.listen") to raw values.
-	Overrides map[string]string
-	// SkipValidate returns the merged configuration without validating it, for
-	// commands that only need a few keys (healthcheck, config print).
+	Path         string
+	Env          func(key string) (string, bool)
+	Overrides    map[string]string
 	SkipValidate bool
 }
 
-// Load reads the YAML file at path over the defaults, applies WAKE_* env var
-// overrides and validates the result. An empty path uses the defaults and env
-// vars only. Problems are joined so that all are reported at once.
+// Load reads the YAML file at path over the defaults, applies env overrides and validates the result.
 func Load(path string) (Config, error) {
 	return LoadWith(Options{Path: path, Env: os.LookupEnv})
 }
@@ -47,9 +37,7 @@ func LoadWith(opts Options) (Config, error) {
 	return Parse(raw, opts)
 }
 
-// Parse builds a configuration from YAML bytes (which may be empty) merged
-// over the defaults, then applies opts.Env and opts.Overrides. Unknown keys
-// are errors. opts.Path is used only in messages.
+// Parse builds a configuration from YAML bytes merged over the defaults.
 func Parse(data []byte, opts Options) (Config, error) {
 	cfg := Default()
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -83,7 +71,6 @@ func sourceLabel(path string) string {
 	return path
 }
 
-// YAML renders the effective configuration as YAML.
 func (c Config) YAML() ([]byte, error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)

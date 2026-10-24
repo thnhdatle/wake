@@ -26,8 +26,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/event"
 )
 
-// createItems creates table name(id bigint primary key, v text, n int)
-// with rows 1..rows.
 func (e *env) createItems(name string, rows int) {
 	e.t.Helper()
 	e.exec(fmt.Sprintf("CREATE TABLE %s (id bigint PRIMARY KEY, v text NOT NULL, n int NOT NULL DEFAULT 0)", name))
@@ -36,9 +34,6 @@ func (e *env) createItems(name string, rows int) {
 	}
 }
 
-// writer applies random single- and multi-statement transactions to one
-// items table: inserts, updates, deletes and key-changing updates. New ids
-// start above base so that writers never collide.
 type writer struct {
 	table string
 	conn  *pgx.Conn
@@ -48,8 +43,6 @@ type writer struct {
 	ops   int
 }
 
-// startWriter runs a writer on its own connection until the returned stop
-// function is called; stop waits for it and fails the test on SQL errors.
 func (e *env) startWriter(table string, base int64, seed uint64) (stop func()) {
 	e.t.Helper()
 	w := &writer{
@@ -79,8 +72,6 @@ func (e *env) startWriter(table string, base int64, seed uint64) (stop func()) {
 	return stop
 }
 
-// loop runs step every 2 ms on its own goroutine until the returned stop
-// function is called; stop waits for it and fails the test on an error.
 func (e *env) loop(step func() error) (stop func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var (
@@ -115,7 +106,6 @@ func (e *env) loop(step func() error) (stop func()) {
 	return stop
 }
 
-// run commits a transaction every 2 ms until ctx ends.
 func (w *writer) run(ctx context.Context) error {
 	tick := time.NewTicker(2 * time.Millisecond)
 	defer tick.Stop()
@@ -148,7 +138,7 @@ func (w *writer) step(ctx context.Context) error {
 		if _, err := tx.Exec(ctx, w.statement()); err != nil {
 			_ = tx.Rollback(ctx)
 			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "40P01" { // deadlock with another writer: retry later
+			if errors.As(err, &pgErr) && pgErr.Code == "40P01" {
 				return nil
 			}
 			return fmt.Errorf("%s: %w", w.table, err)
@@ -160,8 +150,6 @@ func (w *writer) step(ctx context.Context) error {
 	return nil
 }
 
-// statement returns one random write; existing rows are picked as the first
-// id at or above a random point.
 func (w *writer) statement() string {
 	pick := fmt.Sprintf("(SELECT id FROM %s WHERE id >= %d ORDER BY id LIMIT 1)", w.table, w.rng.Int64N(w.span)+1)
 	switch r := w.rng.IntN(10); {
@@ -178,7 +166,6 @@ func (w *writer) statement() string {
 	}
 }
 
-// pgRows returns the rows of table keyed per M2 by keyCols.
 func (e *env) pgRows(table string, keyCols ...string) m2.Table {
 	e.t.Helper()
 	rows, err := e.conn.Query(e.t.Context(), fmt.Sprintf("SELECT to_jsonb(t)::text FROM %s t", table))
@@ -197,8 +184,6 @@ func (e *env) pgRows(table string, keyCols ...string) m2.Table {
 	return t
 }
 
-// consumeAll reads every record of the topics up to their current end
-// offsets; topics that do not exist yield nothing.
 func consumeAll(t *testing.T, k *kafkatest.Kafka, topics ...string) []*kgo.Record {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), waitShort)
@@ -252,7 +237,6 @@ func remaining(want map[string]map[int32]int64) int {
 	return n
 }
 
-// replay applies the records of the topics per M2.
 func replay(t *testing.T, recs []*kgo.Record) (m2.State, m2.Stats) {
 	t.Helper()
 	var r m2.Replayer
@@ -264,8 +248,6 @@ func replay(t *testing.T, recs []*kgo.Record) (m2.State, m2.Stats) {
 	return st, r.Stats()
 }
 
-// assertSinkEqualsSource compares the replayed Kafka topics of tables with
-// Postgres (M2) and returns the replay statistics.
 func (e *env) assertSinkEqualsSource(tables ...string) m2.Stats {
 	e.t.Helper()
 	topics := make([]string, len(tables))
@@ -285,8 +267,6 @@ func (e *env) assertSinkEqualsSource(tables ...string) m2.Stats {
 	return stats
 }
 
-// assertSinkKeysEqualSource compares only the set of keys of the replayed
-// topic with Postgres.
 func (e *env) assertSinkKeysEqualSource(table string) {
 	e.t.Helper()
 	st, _ := replay(e.t, consumeAll(e.t, e.k, e.prefix+".public."+table))

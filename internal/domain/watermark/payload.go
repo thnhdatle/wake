@@ -11,10 +11,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/change"
 )
 
-// Prefix is the logical message prefix of watermarks.
 const Prefix = "wake.watermark"
 
-// JSON member names of the payloads.
 const (
 	memberNonce        = "nonce"
 	memberRun          = "run"
@@ -25,41 +23,25 @@ const (
 	memberCommittedXIP = "committed_xip"
 )
 
-// Mark tells whether a watermark opens (LOW) or closes (HIGH) a chunk window.
 type Mark string
 
-// Watermark marks.
 const (
 	MarkLow  Mark = "low"
 	MarkHigh Mark = "high"
 )
 
-// Payload is the JSON content of a wake.watermark message:
-// {"nonce","run","table","chunk","mark"}; a HIGH adds "snapshot" (the chunk
-// read's pg_current_snapshot in text form) and "committed_xip" (the xids of
-// its xip that pg_xact_status reported committed).
+// Payload is the content of a watermark message.
 type Payload struct {
-	// Nonce is the emitting process' ULID; watermarks with another nonce
-	// were left by a crashed process and are ignored (IsOwn).
-	Nonce string
-	// Run is the snapshot run_id.
-	Run uint64
-	// Table is "<schema>.<table>" (Postgres names).
-	Table string
-	// Chunk is the chunk counter c within the run.
-	Chunk uint64
-	// Mark is MarkLow or MarkHigh.
-	Mark Mark
-	// Snapshot is the chunk read's snapshot (HIGH only; zero for LOW).
-	Snapshot Snapshot
-	// CommittedXIP holds the xids of Snapshot.XIP reported committed, in
-	// increasing order (HIGH only; nil for LOW and when none).
+	Nonce        string
+	Run          uint64
+	Table        string
+	Chunk        uint64
+	Mark         Mark
+	Snapshot     Snapshot
 	CommittedXIP []uint64
 }
 
-// ParsePayload decodes and validates a wake.watermark payload. Decoding is
-// strict: valid UTF-8, no unknown, duplicate or null members, integers only,
-// nothing after the object.
+// ParsePayload decodes a watermark payload.
 func ParsePayload(b []byte) (Payload, error) {
 	var p Payload
 	if err := p.UnmarshalJSON(b); err != nil {
@@ -68,20 +50,12 @@ func ParsePayload(b []byte) (Payload, error) {
 	return p, nil
 }
 
-// IsOwn reports whether the watermark was emitted by the process whose
-// nonce is given; other watermarks must be ignored.
 func (p *Payload) IsOwn(nonce string) bool { return p.Nonce == nonce }
 
-// IsFor reports whether the watermark belongs to the given process, run and
-// table, which is the filter to apply before passing it to a Merger.
 func (p *Payload) IsFor(nonce string, run uint64, table string) bool {
 	return p.IsOwn(nonce) && p.Run == run && p.Table == table
 }
 
-// Validate checks the payload rules: nonce is a canonical ULID, table is
-// "<schema>.<table>" (SplitTable), mark is low or high, a LOW carries no
-// snapshot and no committed_xip, a HIGH carries a valid snapshot and
-// committed_xip is a strictly increasing subset of its xip.
 func (p *Payload) Validate() error {
 	if !validNonce(p.Nonce) {
 		return fmt.Errorf("%w: nonce %q is not a ULID", ErrInvalidPayload, p.Nonce)
@@ -117,8 +91,6 @@ func (p *Payload) validateHigh() error {
 	return nil
 }
 
-// MarshalJSON validates the payload and encodes it with members in the
-// order nonce, run, table, chunk, mark[, snapshot, committed_xip].
 func (p Payload) MarshalJSON() ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -152,7 +124,6 @@ func (p *Payload) appendJSON(dst []byte) []byte {
 	return append(dst, '}')
 }
 
-// UnmarshalJSON decodes strictly (see ParsePayload) and validates.
 func (p *Payload) UnmarshalJSON(b []byte) error {
 	var (
 		v    Payload

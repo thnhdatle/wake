@@ -4,14 +4,10 @@ package pipeline
 
 import "fmt"
 
-// DefaultLanes is the default webhook.lanes.
 const DefaultLanes = 8
 
-// BarrierLane is LaneBatch.Lane of a barrier batch.
 const BarrierLane = -1
 
-// LaneOf hashes a partition key into one of n lanes (FNV-1a, 64 bit). It
-// returns 0 for n <= 1.
 func LaneOf(key []byte, n int) int {
 	if n <= 1 {
 		return 0
@@ -28,47 +24,28 @@ func LaneOf(key []byte, n int) int {
 	return int(h % uint64(n)) //nolint:gosec // G115: n > 1, so the result fits in int
 }
 
-// BatchLimits bound one batch. A batch always holds at least one record,
-// even when that record alone exceeds MaxBytes. Non-positive values mean no
-// limit.
 type BatchLimits struct {
 	MaxEvents int
 	MaxBytes  int
 }
 
-// LaneBatch is a batch handed out by LaneScheduler.Next.
 type LaneBatch struct {
-	// Lane is the lane index, or BarrierLane for a barrier sent alone.
 	Lane    int
 	Records []Record
 }
 
-// LaneScheduler orders records into parallel webhook lanes: keyed
-// records hash into lanes by partition key, each lane has at most one batch
-// in flight, so records of one key are delivered in push order. A barrier
-// record (Record.Barrier) waits until every record pushed before it has
-// completed (all lanes flush), is sent alone, and records pushed after it
-// wait until it completes (lanes resume).
-//
-// It is pure logic and not safe for concurrent use; the adapter guards it
-// with a mutex and drives timing (linger) and retries. Queued records are
-// bounded by capacity: Push returns ErrLanesFull when full, and the adapter
-// blocks its Send until a Complete frees space. Batches in flight are owned
-// by the caller and bounded by lanes × BatchLimits.MaxEvents.
+// LaneScheduler queues records into lanes and hands out batches per lane.
 type LaneScheduler struct {
-	lanes    []recordFIFO
-	busy     []bool
-	queued   int
-	capacity int
-	// blocked holds records pushed while a barrier is pending, in push
-	// order; when non-empty its head is the pending barrier.
+	lanes           []recordFIFO
+	busy            []bool
+	queued          int
+	capacity        int
 	blocked         recordFIFO
 	barrierInFlight bool
-	next            int // round-robin start for Next
+	next            int
 }
 
-// NewLaneScheduler returns a scheduler with n lanes holding at most
-// capacity queued records.
+// NewLaneScheduler creates a scheduler with n lanes and the given capacity.
 func NewLaneScheduler(n, capacity int) (*LaneScheduler, error) {
 	if n <= 0 || capacity <= 0 {
 		return nil, fmt.Errorf("%w: lanes %d, capacity %d", ErrInvalidLanes, n, capacity)
@@ -80,13 +57,10 @@ func NewLaneScheduler(n, capacity int) (*LaneScheduler, error) {
 	}, nil
 }
 
-// Lanes returns the number of lanes.
 func (s *LaneScheduler) Lanes() int { return len(s.lanes) }
 
-// Len returns the number of queued records (not in flight).
 func (s *LaneScheduler) Len() int { return s.queued }
 
-// Push queues rec behind every record pushed before it.
 func (s *LaneScheduler) Push(rec Record) error {
 	if s.queued >= s.capacity {
 		return ErrLanesFull
@@ -100,9 +74,6 @@ func (s *LaneScheduler) Push(rec Record) error {
 	return nil
 }
 
-// Next returns the next batch that may be sent now, or false when none can:
-// every lane with queued records is busy, or a barrier is waiting for lanes
-// to flush or is itself in flight.
 func (s *LaneScheduler) Next(limits BatchLimits) (LaneBatch, bool) {
 	if s.barrierInFlight {
 		return LaneBatch{}, false
@@ -127,9 +98,6 @@ func (s *LaneScheduler) Next(limits BatchLimits) (LaneBatch, bool) {
 	return LaneBatch{}, false
 }
 
-// Complete releases the batch's lane (or the barrier) after the batch was
-// delivered or dead-lettered. It returns ErrUnknownBatch when the batch is
-// not in flight.
 func (s *LaneScheduler) Complete(b LaneBatch) error {
 	if b.Lane == BarrierLane {
 		if !s.barrierInFlight {
@@ -146,7 +114,6 @@ func (s *LaneScheduler) Complete(b LaneBatch) error {
 	return nil
 }
 
-// drained reports whether no keyed record is queued or in flight.
 func (s *LaneScheduler) drained() bool {
 	for i := range s.lanes {
 		if s.busy[i] || s.lanes[i].len() > 0 {
@@ -156,8 +123,6 @@ func (s *LaneScheduler) drained() bool {
 	return true
 }
 
-// release moves the keyed records that follow a completed barrier into
-// their lanes, up to the next barrier.
 func (s *LaneScheduler) release() {
 	for s.blocked.len() > 0 && !s.blocked.peek().Barrier {
 		rec := s.blocked.pop()
@@ -165,7 +130,6 @@ func (s *LaneScheduler) release() {
 	}
 }
 
-// recordFIFO is a queue of records reusing its backing array.
 type recordFIFO struct {
 	buf  []Record
 	head int
@@ -185,7 +149,6 @@ func (q *recordFIFO) pop() Record {
 	return r
 }
 
-// take removes up to limits records from the head (at least one).
 func (q *recordFIFO) take(limits BatchLimits) []Record {
 	n, size := 0, 0
 	for q.head+n < len(q.buf) {

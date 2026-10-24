@@ -65,7 +65,7 @@ func TestFake_Ticker(t *testing.T) {
 	tk := f.NewTicker(time.Second)
 	f.Advance(time.Second)
 	assert.True(t, fired(tk.C()))
-	f.Advance(3 * time.Second) // only one tick buffered, extra ticks dropped
+	f.Advance(3 * time.Second)
 	assert.True(t, fired(tk.C()))
 	assert.False(t, fired(tk.C()))
 	tk.Reset(10 * time.Second)

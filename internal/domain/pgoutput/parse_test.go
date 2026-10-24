@@ -24,7 +24,6 @@ func sampleRelation() *pgoutput.Relation {
 	}}
 }
 
-// sampleMessages returns one valid message of every supported type.
 func sampleMessages() []struct {
 	name string
 	msg  pgoutput.Message
@@ -84,9 +83,6 @@ func TestParse_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestParse_TruncatedNeverPanics cuts every sample message at every length:
-// each prefix is malformed (or, for an empty input, rejected) and never
-// panics.
 func TestParse_TruncatedNeverPanics(t *testing.T) {
 	t.Parallel()
 	for _, tc := range sampleMessages() {

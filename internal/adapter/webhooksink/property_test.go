@@ -19,7 +19,6 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// retryable are the injected failures of the webhook acceptance test.
 var retryable = []action{
 	{status: http.StatusInternalServerError},
 	{status: http.StatusServiceUnavailable},
@@ -28,14 +27,6 @@ var retryable = []action{
 	{reset: true},
 }
 
-// TestSink_Property_InjectedFailures is the unit form of the webhook
-// acceptance test: with 30%
-// injected retryable failures (500, 503, 429, 408, connection reset) and 5%
-// slow responses, random workloads of keyed records and barriers are 100%
-// delivered and acknowledged exactly once, every request carries a valid
-// signature and a delivery id bound to one body, per-key order holds (M4)
-// and every barrier is delivered after all earlier and before all later
-// records.
 func TestSink_Property_InjectedFailures(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(rt *rapid.T) {
@@ -46,7 +37,6 @@ func TestSink_Property_InjectedFailures(t *testing.T) {
 			seed:      rapid.Uint64().Draw(rt, "seed"),
 		}
 		keys := rapid.IntRange(1, 24).Draw(rt, "keys")
-		// -1 is a barrier.
 		w.ops = rapid.SliceOfN(rapid.IntRange(-1, keys-1), 1, 120).Draw(rt, "ops")
 		w.run(rt)
 	})
@@ -62,7 +52,6 @@ type workload struct {
 func (w *workload) run(rt *rapid.T) {
 	clk := clock.NewFake(epoch)
 	rng := rand.New(rand.NewPCG(w.seed, 1))
-	// decide runs under the receiver's mutex, so rng needs no lock.
 	rv := newReceiver(rt, clk, func(int, *received) action {
 		x := rng.Float64()
 		switch {
@@ -96,7 +85,6 @@ func (w *workload) run(rt *rapid.T) {
 	checkOrder(rt, w.ops, rv.acceptedRequests())
 }
 
-// checkRequests verifies signatures and that a delivery id names one body.
 func checkRequests(t require.TestingT, reqs []*received) {
 	bodies := map[string]string{}
 	ids := map[string]string{}
@@ -112,9 +100,6 @@ func checkRequests(t require.TestingT, reqs []*received) {
 	}
 }
 
-// checkOrder applies M4 to the accepted requests: after dropping repeated
-// ids, no key goes back in seq, and a barrier sees exactly the records
-// before it.
 func checkOrder(t require.TestingT, ops []int, accepted []*received) {
 	seen := map[string]bool{}
 	last := map[string]uint64{}
@@ -126,8 +111,6 @@ func checkOrder(t require.TestingT, ops []int, accepted []*received) {
 			}
 			seen[it.ID] = true
 			if it.Type == "schema_change" {
-				// Nothing later was delivered before it and, with n
-				// distinct records delivered, every earlier one was.
 				require.Less(t, maxSeq, it.N, "barrier %d after a later record", it.N)
 				require.Len(t, seen, int(it.N), "barrier %d before an earlier record", it.N) //nolint:gosec // G115: small n
 			}

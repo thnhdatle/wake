@@ -27,8 +27,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/cdcsource"
 )
 
-// Readiness checks and their error codes (docs/guides/errors.md) of `wake
-// cache-invalidator`.
 const (
 	invalCheckRedis     = "redis"
 	invalCheckSource    = "source"
@@ -38,17 +36,12 @@ const (
 	codeInvalSourceUnavailable = "source_unavailable"
 )
 
-// Timeouts of the cache invalidator's external calls.
 const (
 	invalCatalogTimeout = 30 * time.Second
 	invalRedisDial      = 5 * time.Second
 	invalRedisIO        = 3 * time.Second
 )
 
-// invalTableQuery reads what the validate_dsn_env check needs about one
-// table: replica identity, published (non-generated) columns and the replica
-// identity key columns (primary key, or the REPLICA IDENTITY USING INDEX
-// index).
 const invalTableQuery = `
 SELECT c.relreplident::text,
        ARRAY(SELECT a.attname::text FROM pg_attribute a
@@ -62,16 +55,12 @@ SELECT c.relreplident::text,
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind IN ('r', 'p')`
 
-// invalEnv holds the process dependencies of the command; tests replace them.
 type invalEnv struct {
-	getenv func(string) string
-	log    *slog.Logger
-	// listener, when set, serves the admin endpoints instead of listening on
-	// cache_invalidator.admin_listen.
+	getenv   func(string) string
+	log      *slog.Logger
 	listener net.Listener
 }
 
-// invalCodedError attaches a stable error code to an error.
 type invalCodedError struct {
 	code string
 	err  error
@@ -81,8 +70,6 @@ func (e *invalCodedError) Error() string     { return e.err.Error() }
 func (e *invalCodedError) Unwrap() error     { return e.err }
 func (e *invalCodedError) ErrorCode() string { return e.code }
 
-// invalConfigError marks err as a configuration error: exit code 2 and
-// the cdcsource code when there is one, else config_invalid.
 func invalConfigError(err error) error {
 	code := cdcsource.ErrorCode(err)
 	if code == "" || code == cdcsource.CodeInvalidConfig {
@@ -105,9 +92,6 @@ func newCacheInvalidatorCmd(cfgPath *string) *cobra.Command {
 	}
 }
 
-// loadInvalidatorConfig loads the configuration, checks the
-// cache_invalidator section only (the CDC sections may be absent) and
-// parses the templates. Every failure is a configuration error.
 func loadInvalidatorConfig(cfgPath string) (config.Config, *cdcsource.Mapping, error) {
 	cfg, err := loadConfig(cfgPath, true)
 	if err != nil {
@@ -123,7 +107,6 @@ func loadInvalidatorConfig(cfgPath string) (config.Config, *cdcsource.Mapping, e
 	return cfg, m, nil
 }
 
-// invalRuntime is the wired invalidator.
 type invalRuntime struct {
 	rdb     redis.UniversalClient
 	deleter cache.Cache[[]byte]
@@ -133,7 +116,7 @@ type invalRuntime struct {
 
 func (r *invalRuntime) close() {
 	if r.deleter != nil {
-		_ = r.deleter.Close() // only stops the bus subscriber
+		_ = r.deleter.Close()
 	}
 	if r.rdb != nil {
 		_ = r.rdb.Close()
@@ -151,7 +134,6 @@ func runCacheInvalidator(ctx context.Context, cfgPath string, env invalEnv) erro
 	}
 	rt := &invalRuntime{}
 	defer rt.close()
-	// cache.New takes no context: its bus subscriber lives until Close.
 	if err = rt.build(&cfg.CacheInvalidator, mapping, env); err != nil { //nolint:contextcheck // see above
 		return err
 	}
@@ -171,8 +153,6 @@ func runCacheInvalidator(ctx context.Context, cfgPath string, env invalEnv) erro
 	return err
 }
 
-// build connects nothing yet: clients connect lazily, so the invalidator
-// starts (degraded, not ready) while Redis or the broker is unreachable.
 func (r *invalRuntime) build(ci *config.CacheInvalidator, m *cdcsource.Mapping, env invalEnv) error {
 	opts, err := invalidatorRedisOptions(&ci.Redis, env.getenv)
 	if err != nil {
@@ -205,15 +185,11 @@ func (r *invalRuntime) build(ci *config.CacheInvalidator, m *cdcsource.Mapping, 
 	return nil
 }
 
-// invalBytesCodec stores raw bytes; the invalidator only deletes, so its
-// cache never encodes a value.
 type invalBytesCodec struct{}
 
 func (invalBytesCodec) Marshal(v []byte) ([]byte, error)      { return v, nil }
 func (invalBytesCodec) Unmarshal(data []byte) ([]byte, error) { return data, nil }
 
-// invalidatorReadiness reports Redis, the event source and the
-// template_requires_full_identity condition.
 func invalidatorReadiness(rdb redis.UniversalClient, inv *cdcsource.Invalidator) httpadmin.ReadinessFunc {
 	return func(ctx context.Context) []httpadmin.Check {
 		redisCheck := httpadmin.Check{Name: invalCheckRedis, OK: true}
@@ -245,7 +221,6 @@ func invalFailedCheck(name, code string, err error) httpadmin.Check {
 	return httpadmin.Check{Name: name, Code: code, Reason: strings.ReplaceAll(err.Error(), "\n", "; ")}
 }
 
-// invalSplit returns the errors of a joined error, err itself otherwise.
 func invalSplit(err error) []error {
 	if err == nil {
 		return nil
@@ -256,10 +231,6 @@ func invalSplit(err error) []error {
 	return []error{err}
 }
 
-// invalidatorRedisOptions builds the go-redis options of
-// cache_invalidator.redis: several addresses select Cluster and master_name
-// selects Sentinel (redis.NewUniversalClient); the password comes from the
-// password_env variable.
 func invalidatorRedisOptions(r *config.Redis, getenv func(string) string) (*redis.UniversalOptions, error) {
 	opts := &redis.UniversalOptions{
 		Addrs:        r.Addrs,
@@ -284,9 +255,6 @@ func invalidatorRedisOptions(r *config.Redis, getenv func(string) string) (*redi
 	return opts, nil
 }
 
-// loadInvalidatorTLS builds a client TLS configuration from PEM files:
-// ca_file replaces the system roots, cert_file and key_file present a client
-// certificate.
 func loadInvalidatorTLS(c config.TLS, key string) (*tls.Config, error) {
 	out := &tls.Config{MinVersion: tls.VersionTLS12}
 	if c.CAFile != "" {
@@ -310,7 +278,6 @@ func loadInvalidatorTLS(c config.TLS, key string) (*tls.Config, error) {
 	return out, nil
 }
 
-// newInvalidatorSource builds the Kafka or NATS source of the section.
 func newInvalidatorSource(ci *config.CacheInvalidator, m *cdcsource.Mapping, env invalEnv) (cdcsource.Source, error) {
 	switch ci.Source {
 	case config.SourceNATS:
@@ -352,13 +319,6 @@ func newInvalidatorSource(ci *config.CacheInvalidator, m *cdcsource.Mapping, env
 	return cdcsource.NewKafkaSource(kc, m, cdcsource.WithSourceLogger(env.log))
 }
 
-// checkInvalidatorTemplates is the validate_dsn_env check: with
-// the DSN from that environment variable it rejects templates that reference
-// non-key columns of a table whose replica identity is not FULL, columns a
-// table does not publish and tables that do not exist. An empty
-// validate_dsn_env disables it; an unset variable skips it with a warning
-// (the runtime check still applies). A rejection is a configuration error
-// (exit 2); an unreachable database is a runtime failure.
 func checkInvalidatorTemplates(ctx context.Context, cfg *config.Config, m *cdcsource.Mapping, env invalEnv) error {
 	name := cfg.CacheInvalidator.ValidateDSNEnv
 	if name == "" {
@@ -380,9 +340,6 @@ func checkInvalidatorTemplates(ctx context.Context, cfg *config.Config, m *cdcso
 	return nil
 }
 
-// readInvalidatorTables reads the metadata of the mapped tables, named as in
-// the events; tables.name_map is applied in reverse to find the Postgres
-// table. Missing tables are left out (CheckReplicaIdentity reports them).
 func readInvalidatorTables(ctx context.Context, dsn string, tables *config.Tables, names []string,
 ) ([]cdcsource.TableInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, invalCatalogTimeout)

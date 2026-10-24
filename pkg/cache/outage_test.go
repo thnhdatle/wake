@@ -16,7 +16,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2fake"
 )
 
-// openBreaker makes L2 unreachable for n and drives it to an open breaker.
 func openBreaker(t *testing.T, n node) {
 	t.Helper()
 	n.cli.SetDown(true)
@@ -42,7 +41,6 @@ func TestCache_Breaker_OpensAndRecovers(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, reads, a.cli.Calls(l2fake.OpRead), "no L2 call while open")
 
-	// Probes fail while L2 is down.
 	epochCalls := a.cli.Calls(l2fake.OpEpoch)
 	e.advanceUntil(probeInterval, func() bool { return a.cli.Calls(l2fake.OpEpoch) > epochCalls+1 })
 	assert.False(t, a.breaker.allow())
@@ -196,7 +194,7 @@ func TestCache_PendingKey_BypassesL2(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, a.Set(ctx, "k", 1))
 	e.idle()
-	a.pending.add("k") // as if a Delete of k had been deferred
+	a.pending.add("k")
 	a.l1.Flush()
 	calls := 0
 	v, err := a.GetOrLoad(ctx, "k", constLoader(2, &calls))
@@ -298,9 +296,9 @@ func TestCache_BusReconnect_FlushesL1AndRereadsEpoch(t *testing.T) {
 	a.cli.SetBusDown(true)
 	eventually(t, func() bool { return !a.busUp.Load() })
 	assert.InDelta(t, 0, metricValue(a.m.busUp), 0)
-	require.NoError(t, b.Delete(ctx, "k")) // message lost for a
+	require.NoError(t, b.Delete(ctx, "k"))
 	admin := e.admin()
-	next, err := admin.BumpEpoch(ctx) // message lost for a
+	next, err := admin.BumpEpoch(ctx)
 	require.NoError(t, err)
 	_, cached := a.l1Peek("j")
 	require.True(t, cached)
@@ -355,7 +353,7 @@ func TestCache_Overflow_AddsDuringBumpSurvive(t *testing.T) {
 	assert.True(t, p.add("b"))
 	_, overflow, seq := p.snapshot()
 	require.True(t, overflow)
-	p.add("c") // after the snapshot: the epoch bump may not cover it
+	p.add("c")
 	p.resolveUpTo(seq)
 	assert.True(t, p.blocks("anything"), "overflow kept for the next round")
 	_, _, seq = p.snapshot()
@@ -363,12 +361,11 @@ func TestCache_Overflow_AddsDuringBumpSurvive(t *testing.T) {
 	assert.False(t, p.active.Load())
 	p.add("d")
 	s := p.seq()
-	p.add("d") // re-added after the replay started
+	p.add("d")
 	p.removeUpTo("d", s)
 	assert.True(t, p.blocks("d"))
 }
 
-// flakyBus returns one unexpected error from its second Receive call.
 type flakyBus struct {
 	*l2fake.Client
 	calls atomic.Int32
@@ -394,7 +391,7 @@ func TestCache_Subscriber_UnexpectedErrorResyncs(t *testing.T) {
 	n := asImpl(t, c)
 	eventually(t, func() bool { return bus.calls.Load() >= 2 && !n.busUp.Load() })
 	ctx := t.Context()
-	n.l1.Set("stale", l1Entry(1)) // may be stale: messages were possibly lost
+	n.l1.Set("stale", l1Entry(1))
 	_, err = e.admin().Invalidate(ctx, l2.InvalidateRequest{Epoch: 1, Key: "other", GenTTL: time.Hour})
 	require.NoError(t, err)
 	e.advanceUntil(busRetryDelay, func() bool { return n.busUp.Load() })

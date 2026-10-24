@@ -6,8 +6,6 @@ run:
   tests: true
   build-tags:
     - integration
-    - acceptance
-    - bench
 
 linters:
   default: none
@@ -140,9 +138,14 @@ linters:
       - path-except: ^internal/adapter/
         linters:
           - wrapcheck
-      # Relaxations for tests and the acceptance harness that cannot be avoided:
-      # long table-driven tests, repeated fixtures, literal fixture data, test credentials.
-      - path: (.+_test\.go|^acceptance/)
+      # Only the public API needs a doc comment on every exported name.
+      - path: (^internal/|/internal/|^cmd/|^examples/)
+        text: "exported"
+        linters:
+          - revive
+      # Relaxations for tests: long table-driven tests, repeated fixtures, literal fixture data,
+      # test credentials.
+      - path: .+_test\.go
         linters:
           - funlen
           - dupl

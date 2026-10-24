@@ -66,7 +66,6 @@ func TestTopicName(t *testing.T) {
 	t.Parallel()
 
 	prefix := "cdc"
-	// "cdc." + "." + table: 4 + 1 + len(schema) + len(table) = 249 for the longest accepted name.
 	longest := strings.Repeat("t", 249-len("cdc.public."))
 	tests := []struct {
 		name                  string

@@ -23,8 +23,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/tlsgen"
 )
 
-// DefaultImage is the Kafka image of deploy/docker-compose.yml; the
-// WAKE_TEST_KAFKA_IMAGE environment variable overrides it.
 const DefaultImage = "apache/kafka:3.9.0"
 
 const (
@@ -40,27 +38,20 @@ const (
 	readyTimeout = 2 * time.Minute
 )
 
-// Kafka is a single-node KRaft broker in a container, reached through a
-// loopback proxy so it survives restarts on a new host port.
+// Kafka is a single-node broker in a container.
 type Kafka struct {
-	ctr   *testcontainers.DockerContainer
-	proxy *tcpproxy.Proxy
-	// Brokers is the seed list ("127.0.0.1:<port>").
+	ctr     *testcontainers.DockerContainer
+	proxy   *tcpproxy.Proxy
 	Brokers []string
-	// TLS holds the certificates when the broker listens with TLS.
-	TLS *tlsgen.Bundle
-	// Users are the SCRAM users of a SASL_SSL listener; test clients
-	// authenticate as the first.
-	Users []User
+	TLS     *tlsgen.Bundle
+	Users   []User
 }
 
-// User is a SCRAM user name and password (letters and digits only).
 type User struct {
 	Name     string
 	Password string
 }
 
-// Option configures Start.
 type Option func(*options)
 
 type options struct {
@@ -68,15 +59,11 @@ type options struct {
 	users []User
 }
 
-// WithTLSAndSCRAM makes the client listener SASL_SSL: certificates from
-// tlsgen, client certificates requested but optional, and SCRAM-SHA-256 and
-// SCRAM-SHA-512 credentials for every user (bootstrapped at format time).
 func WithTLSAndSCRAM(users ...User) Option {
 	return func(o *options) { o.tls, o.users = true, users }
 }
 
-// Start runs a broker for the test and terminates it at the end. Topics are
-// never auto-created; the heap is 512 MiB.
+// Start runs a broker for the test and terminates it at the end.
 func Start(tb testing.TB, opts ...Option) *Kafka {
 	tb.Helper()
 	var o options
@@ -113,8 +100,6 @@ func Start(tb testing.TB, opts ...Option) *Kafka {
 	return k
 }
 
-// listeners binds the client and inter-broker listeners on every
-// interface; the controller listener stays inside the container.
 const listeners = "EXTERNAL://0.0.0.0:9093,BROKER://0.0.0.0:9092,CONTROLLER://localhost:9094"
 
 func textFile(path, content string, mode int64) testcontainers.ContainerFile {
@@ -128,8 +113,6 @@ func image() string {
 	return DefaultImage
 }
 
-// properties renders server.properties: a combined broker and controller
-// whose client listener EXTERNAL advertises the proxy.
 func (k *Kafka) properties(o options) string {
 	protocol := "PLAINTEXT"
 	if o.tls {
@@ -171,8 +154,6 @@ func (k *Kafka) properties(o options) string {
 	return b.String()
 }
 
-// startCommand formats the storage (idempotent across restarts, adding the
-// SCRAM credentials the first time) and starts the server.
 func startCommand(users []User) string {
 	var b strings.Builder
 	b.WriteString("set -e\n")
@@ -186,7 +167,6 @@ func startCommand(users []User) string {
 	return b.String()
 }
 
-// retarget points the proxy at the container's current host port.
 func (k *Kafka) retarget(ctx context.Context, tb testing.TB) {
 	tb.Helper()
 	addr, err := k.ctr.PortEndpoint(ctx, clientPort, "")
@@ -196,7 +176,6 @@ func (k *Kafka) retarget(ctx context.Context, tb testing.TB) {
 	k.proxy.SetTarget(addr)
 }
 
-// waitReady polls the broker until it answers metadata requests.
 func (k *Kafka) waitReady(tb testing.TB) {
 	tb.Helper()
 	cl := k.Client(tb)
@@ -220,8 +199,6 @@ func (k *Kafka) waitReady(tb testing.TB) {
 	}
 }
 
-// ClientOpts returns the franz-go options that reach the broker as the
-// first SCRAM user (SCRAM-SHA-512) over TLS, or in plain text.
 func (k *Kafka) ClientOpts(tb testing.TB) []kgo.Opt {
 	tb.Helper()
 	opts := []kgo.Opt{kgo.SeedBrokers(k.Brokers...)}
@@ -236,7 +213,6 @@ func (k *Kafka) ClientOpts(tb testing.TB) []kgo.Opt {
 	return opts
 }
 
-// Client returns a franz-go client closed at the end of the test.
 func (k *Kafka) Client(tb testing.TB, extra ...kgo.Opt) *kgo.Client {
 	tb.Helper()
 	cl, err := kgo.NewClient(append(k.ClientOpts(tb), extra...)...)
@@ -247,14 +223,11 @@ func (k *Kafka) Client(tb testing.TB, extra ...kgo.Opt) *kgo.Client {
 	return cl
 }
 
-// Admin returns an admin client closed at the end of the test.
 func (k *Kafka) Admin(tb testing.TB) *kadm.Client {
 	tb.Helper()
 	return kadm.NewClient(k.Client(tb))
 }
 
-// CreateTopic creates a topic with partitions partitions, replication
-// factor 1 and the given configs.
 func (k *Kafka) CreateTopic(tb testing.TB, topic string, partitions int32, configs map[string]*string) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(tb.Context(), 30*time.Second)
@@ -264,8 +237,6 @@ func (k *Kafka) CreateTopic(tb testing.TB, topic string, partitions int32, confi
 	}
 }
 
-// Consume reads topic from the beginning until it has at least n records
-// or timeout passes, and returns what it read.
 func (k *Kafka) Consume(tb testing.TB, topic string, n int, timeout time.Duration) []*kgo.Record {
 	tb.Helper()
 	cl := k.Client(tb, kgo.ConsumeTopics(topic), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
@@ -279,14 +250,10 @@ func (k *Kafka) Consume(tb testing.TB, topic string, n int, timeout time.Duratio
 	return out
 }
 
-// Outage drops every connection to the broker until Restore.
 func (k *Kafka) Outage() { k.proxy.Down() }
 
-// Restore ends an Outage.
 func (k *Kafka) Restore() { k.proxy.Up() }
 
-// Restart stops the container (the broker shuts down cleanly), starts it
-// again on its data and waits until it serves requests.
 func (k *Kafka) Restart(tb testing.TB) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(tb.Context(), startTimeout)

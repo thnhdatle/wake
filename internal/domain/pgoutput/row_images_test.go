@@ -14,7 +14,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// Relation OIDs of the row image fixtures.
 const (
 	oidDocs uint32 = 100 + iota
 	oidFullPK
@@ -24,8 +23,6 @@ const (
 	oidNothing
 )
 
-// imageDecoder returns a decoder that knows one relation per identity kind;
-// the FULL table with primary key has its key set like the app would.
 func imageDecoder(t *testing.T) *pgoutput.Decoder {
 	t.Helper()
 	dec := pgoutput.NewDecoder()
@@ -46,7 +43,6 @@ func imageDecoder(t *testing.T) *pgoutput.Decoder {
 	return dec
 }
 
-// rowJSON renders a row image like change.Event does ("null" for nil).
 func rowJSON(r change.Row) string {
 	if r == nil {
 		return "null"

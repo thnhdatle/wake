@@ -9,19 +9,14 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/change"
 )
 
-// TriggerPrefix is the logical message prefix of snapshot requests written
-// by `wake snapshot table`.
 const TriggerPrefix = "wake.snapshot"
 
-// Trigger is the JSON content of a wake.snapshot message:
-// {"table":"<schema>.<table>"}.
+// Trigger is a snapshot request for one table.
 type Trigger struct {
-	// Table is "<schema>.<table>" (Postgres names).
 	Table string
 }
 
-// ParseTrigger decodes and validates a wake.snapshot payload with the same
-// strictness as ParsePayload.
+// ParseTrigger decodes a snapshot trigger.
 func ParseTrigger(b []byte) (Trigger, error) {
 	var t Trigger
 	if err := t.UnmarshalJSON(b); err != nil {
@@ -30,7 +25,6 @@ func ParseTrigger(b []byte) (Trigger, error) {
 	return t, nil
 }
 
-// Validate checks that Table is "<schema>.<table>" (SplitTable).
 func (t Trigger) Validate() error {
 	if _, _, ok := SplitTable(t.Table); !ok {
 		return fmt.Errorf("%w: table %q", ErrInvalidTrigger, t.Table)
@@ -38,13 +32,11 @@ func (t Trigger) Validate() error {
 	return nil
 }
 
-// Split returns the schema and table names.
 func (t Trigger) Split() (schema, table string) {
 	schema, table, _ = SplitTable(t.Table)
 	return schema, table
 }
 
-// MarshalJSON validates and encodes the trigger.
 func (t Trigger) MarshalJSON() ([]byte, error) {
 	if err := t.Validate(); err != nil {
 		return nil, err
@@ -54,7 +46,6 @@ func (t Trigger) MarshalJSON() ([]byte, error) {
 	return append(dst, '}'), nil
 }
 
-// UnmarshalJSON decodes strictly and validates.
 func (t *Trigger) UnmarshalJSON(b []byte) error {
 	var (
 		v    Trigger

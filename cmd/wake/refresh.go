@@ -17,28 +17,16 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// refreshTimeout bounds one table refresh.
 const refreshTimeout = time.Minute
 
-// tableLister lists the captured tables of one refresh.
 type tableLister interface {
-	// captured returns the captured tables ("<schema>.<table>", Postgres
-	// names) and the tables skipped with their reasons.
 	captured(ctx context.Context, r pipeline.TableResolver) (names []string, skipped map[string]string, err error)
 }
 
-// tableQueue receives newly detected tables (snapshot.Snapshotter).
 type tableQueue interface {
 	AddTables(ctx context.Context, tables []string) error
 }
 
-// refresher detects added and removed tables: every tables.refresh_interval and
-// on SIGHUP it re-evaluates the tables (managed mode: EnsureManaged with the
-// current globs, existing mode: the publication's table list), and queues
-// table snapshots of newly captured tables when snapshot.added_tables
-// is on. SIGHUP first reloads tables.include, tables.exclude and
-// tables.name_map from the configuration file; other changes need a
-// restart. Refresh failures are logged and retried at the next tick.
 type refresher struct {
 	lister   tableLister
 	queue    tableQueue
@@ -50,10 +38,8 @@ type refresher struct {
 	hup      <-chan os.Signal
 	clk      clock.Clock
 	log      *slog.Logger
-	// known are the captured tables; skipped the skipped ones already
-	// logged. Only Run's goroutine uses them.
-	known   map[string]bool
-	skipped map[string]bool
+	known    map[string]bool
+	skipped  map[string]bool
 }
 
 func newRefresher(s *service, w *wiring, resolver *liveResolver, known []string) *refresher {
@@ -74,7 +60,7 @@ func newRefresher(s *service, w *wiring, resolver *liveResolver, known []string)
 	return r
 }
 
-// Run refreshes every interval and on SIGHUP until ctx ends; it returns nil.
+// Run refreshes the table list every interval and on SIGHUP until ctx ends.
 func (r *refresher) Run(ctx context.Context) error {
 	ticker := r.clk.NewTicker(r.interval)
 	defer ticker.Stop()
@@ -90,7 +76,6 @@ func (r *refresher) Run(ctx context.Context) error {
 	}
 }
 
-// reload rebuilds the resolver from the configuration file (SIGHUP).
 func (r *refresher) reload() {
 	cfg, err := loadConfig(r.cfgPath, false)
 	if err != nil {
@@ -106,7 +91,6 @@ func (r *refresher) reload() {
 	r.log.Info("SIGHUP: reloaded tables.include, tables.exclude and tables.name_map; other changes need a restart")
 }
 
-// refresh runs one detection round.
 func (r *refresher) refresh(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
 	defer cancel()
@@ -145,8 +129,6 @@ func (r *refresher) refresh(ctx context.Context) {
 	}
 }
 
-// logSkipped logs each newly skipped table once at error (keyless and
-// unmapped invalid names are skipped at refresh).
 func (r *refresher) logSkipped(skipped map[string]string) {
 	for t, reason := range skipped {
 		if r.skipped[t] {
@@ -175,7 +157,6 @@ func skipHint(reason string) string {
 	}
 }
 
-// managedLister re-evaluates the globs with EnsureManaged.
 type managedLister struct {
 	pubs        *pgsql.Publications
 	source      string
@@ -197,7 +178,6 @@ func (m managedLister) captured(ctx context.Context, r pipeline.TableResolver) (
 	return syncedNames(&res), skipped, nil
 }
 
-// existingLister polls the existing publication's table list.
 type existingLister struct {
 	pubs *pgsql.Publications
 	name string

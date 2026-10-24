@@ -15,11 +15,8 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// DefaultMaxChunkAttempts bounds the consecutive failed attempts of one
-// chunk (read or emit errors, visibility retries) before Run fails.
 const DefaultMaxChunkAttempts = 50
 
-// SnapshotterDeps are the table snapshotter's dependencies.
 type SnapshotterDeps struct {
 	Keeper   *StateKeeper
 	Chunks   pipeline.ChunkReader
@@ -29,52 +26,27 @@ type SnapshotterDeps struct {
 	Clock    clock.Clock
 }
 
-// SnapshotterConfig is the table snapshotter's configuration.
 type SnapshotterConfig struct {
-	// Nonce is this process' ULID in watermark payloads.
-	Nonce string
-	// ChunkRows is snapshot.chunk_rows for new runs; zero means the default.
-	ChunkRows int
-	// AddedTables is snapshot.added_tables.
+	Nonce       string
+	ChunkRows   int
 	AddedTables bool
 }
 
-// SnapshotterOption configures a Snapshotter.
 type SnapshotterOption func(*Snapshotter)
 
-// WithAfter delays table snapshots until ch is closed (Initial.Done).
 func WithAfter(ch <-chan struct{}) SnapshotterOption { return func(s *Snapshotter) { s.after = ch } }
 
-// WithMetrics sets the metrics receiver.
 func WithMetrics(m Metrics) SnapshotterOption { return func(s *Snapshotter) { s.metrics = m } }
 
-// WithLogger sets the logger (default: discard).
 func WithLogger(l *slog.Logger) SnapshotterOption { return func(s *Snapshotter) { s.logger = l } }
 
-// WithRetryBackoff sets the delay between chunk attempts.
 func WithRetryBackoff(b pipeline.Backoff) SnapshotterOption {
 	return func(s *Snapshotter) { s.backoff = b }
 }
 
-// WithMaxChunkAttempts sets the bound on consecutive failed attempts of one
-// chunk (default DefaultMaxChunkAttempts).
 func WithMaxChunkAttempts(n int) SnapshotterOption { return func(s *Snapshotter) { s.maxAttempts = n } }
 
-// Snapshotter runs table snapshots through watermarks: the
-// unfinished runs of the state first (a resumed initial snapshot keeps its
-// run_id), then queued tables (added tables and wake.snapshot requests),
-// one table at a time, each queued table in a new run.
-//
-// Per chunk it persists the chunk counter, emits LOW, reads the chunk in
-// its own REPEATABLE READ transaction, hands the keys to the merger, emits
-// HIGH with the read's snapshot and committed xids and waits for the
-// stream to read HIGH. The Snapshotter is also the stream reader's
-// pipeline.TxObserver: it feeds every transaction to the table's
-// watermark.Merger and, at the HIGH transaction, either reports a retry or
-// asks the reader to hold the transaction open and routes the kept rows into
-// it as `r` events (id <HIGH lsn>-r<run>-<n>, ts_ms the HIGH commit time)
-// before any later stream transaction is dispatched. A chunk is complete
-// when its group is acknowledged; progress advances over complete chunks.
+// Snapshotter runs table snapshots through watermarks, one table at a time.
 type Snapshotter struct {
 	deps        SnapshotterDeps
 	cfg         SnapshotterConfig
@@ -84,7 +56,7 @@ type Snapshotter struct {
 	backoff     pipeline.Backoff
 	maxAttempts int
 
-	mu             sync.Mutex // protects the observer state below
+	mu             sync.Mutex
 	inTx           bool
 	tx             pipeline.ObservedTx
 	active         *activeTable
@@ -94,10 +66,9 @@ type Snapshotter struct {
 	txTriggers     []string
 	held           *highResult
 	results        []chunkResult
-	resultSignal   chan struct{} // capacity 1
+	resultSignal   chan struct{}
 }
 
-// activeTable is the table being snapshotted, as the observer sees it.
 type activeTable struct {
 	run       uint64
 	chunkRows int
@@ -108,7 +79,6 @@ type activeTable struct {
 	rows      []pipeline.ChunkRow
 }
 
-// highResult is the merger's decision at a HIGH watermark of this process.
 type highResult struct {
 	chunk uint64
 	out   watermark.Outcome
@@ -116,7 +86,6 @@ type highResult struct {
 	tx    pipeline.ObservedTx
 }
 
-// chunkResult is what the snapshot goroutine learns about a chunk.
 type chunkResult struct {
 	chunk    uint64
 	retry    bool
@@ -126,8 +95,6 @@ type chunkResult struct {
 	done     <-chan struct{}
 }
 
-// maxResults bounds undelivered chunk results; only results of abandoned
-// attempts can accumulate, and the oldest is dropped.
 const maxResults = 8
 
 // NewSnapshotter validates the dependencies and configuration.
@@ -156,8 +123,6 @@ func NewSnapshotter(deps SnapshotterDeps, cfg SnapshotterConfig, opts ...Snapsho
 	return s, nil
 }
 
-// AddTables queues table snapshots of tables detected after startup
-// when snapshot.added_tables is on.
 func (s *Snapshotter) AddTables(ctx context.Context, tables []string) error {
 	if !s.cfg.AddedTables || len(tables) == 0 {
 		return nil
@@ -165,7 +130,7 @@ func (s *Snapshotter) AddTables(ctx context.Context, tables []string) error {
 	return s.deps.Keeper.EnqueueTables(ctx, tables)
 }
 
-// Run executes snapshot runs until ctx ends; it returns nil then.
+// Run executes snapshot runs until ctx ends.
 func (s *Snapshotter) Run(ctx context.Context) error {
 	err := s.run(ctx)
 	if ctx.Err() != nil {
@@ -204,8 +169,6 @@ func (s *Snapshotter) run(ctx context.Context) error {
 	}
 }
 
-// startQueued starts a run for the queued table, or drops a request for a
-// table that is not captured.
 func (s *Snapshotter) startQueued(ctx context.Context, name string) error {
 	tables, err := s.deps.Tables.CapturedTables(ctx)
 	if err != nil {
@@ -225,8 +188,6 @@ func (s *Snapshotter) startQueued(ctx context.Context, name string) error {
 	return s.execRun(ctx, &run)
 }
 
-// execRun snapshots the unfinished tables of a run, one at a time, and
-// removes the run.
 func (s *Snapshotter) execRun(ctx context.Context, run *pipeline.SnapshotRun) error {
 	tables, err := s.deps.Tables.CapturedTables(ctx)
 	if err != nil {
@@ -295,7 +256,6 @@ func (s *Snapshotter) snapshotTable(ctx context.Context, run *pipeline.SnapshotR
 	}
 }
 
-// retryWait logs a failed attempt and waits the backoff delay.
 func (s *Snapshotter) retryWait(ctx context.Context, t *Table, c uint64, res *chunkResult, err error,
 	attempt int,
 ) error {
@@ -321,7 +281,6 @@ func (s *Snapshotter) retryWait(ctx context.Context, t *Table, c uint64, res *ch
 	}
 }
 
-// chunk runs one attempt of the watermark procedure for chunk c.
 func (s *Snapshotter) chunk(ctx context.Context, run *pipeline.SnapshotRun, t *Table, c uint64,
 	pos json.RawMessage,
 ) (pipeline.Chunk, chunkResult, error) {
@@ -357,8 +316,6 @@ func (s *Snapshotter) emit(ctx context.Context, p *watermark.Payload) error {
 	return nil
 }
 
-// await waits for the stream's result of chunk c; results of other
-// (abandoned) chunks are discarded.
 func (s *Snapshotter) await(ctx context.Context, c uint64) (chunkResult, error) {
 	for {
 		s.mu.Lock()
@@ -379,7 +336,6 @@ func (s *Snapshotter) await(ctx context.Context, c uint64) (chunkResult, error) 
 	}
 }
 
-// pushResultLocked delivers a chunk result to the snapshot goroutine.
 func (s *Snapshotter) pushResultLocked(r chunkResult) {
 	if len(s.results) >= maxResults {
 		s.results = s.results[1:]
@@ -391,10 +347,6 @@ func (s *Snapshotter) pushResultLocked(r chunkResult) {
 	}
 }
 
-// install makes t the table the observer feeds to a new merger, at a
-// transaction boundary of the stream: a merger must see every transaction
-// whose Begin it is fed after its creation, which must precede the first
-// LOW (watermark.Merger).
 func (s *Snapshotter) install(ctx context.Context, run *pipeline.SnapshotRun, t *Table) error {
 	a := &activeTable{run: run.ID, chunkRows: run.ChunkRows, table: *t, merger: watermark.NewMerger()}
 	s.mu.Lock()
@@ -420,7 +372,6 @@ func (s *Snapshotter) uninstall() {
 	s.active, s.pendingInstall, s.installed, s.held = nil, nil, nil, nil
 }
 
-// setRows hands the chunk's keys to the merger before HIGH is emitted.
 func (s *Snapshotter) setRows(c uint64, rows []pipeline.ChunkRow) {
 	keys := make([][]byte, len(rows))
 	for i := range rows {

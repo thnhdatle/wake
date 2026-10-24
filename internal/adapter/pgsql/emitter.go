@@ -12,15 +12,13 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Emitter writes transactional logical messages (watermarks, heartbeats,
-// snapshot requests). It implements pipeline.MessageEmitter and is safe for
-// concurrent use.
+// Emitter writes logical messages into the WAL.
 type Emitter struct {
 	pool *Pool
 	o    options
 }
 
-// NewEmitter validates the dependencies.
+// NewEmitter returns an Emitter that uses pool.
 func NewEmitter(pool *Pool, opts ...Option) (*Emitter, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("%w: nil pool", ErrInvalidArgument)
@@ -32,15 +30,13 @@ func NewEmitter(pool *Pool, opts ...Option) (*Emitter, error) {
 	return &Emitter{pool: pool, o: o}, nil
 }
 
-// EmitMessage implements pipeline.MessageEmitter: SELECT
-// pg_logical_emit_message(true, prefix, content) in its own transaction; it
-// returns the message's LSN.
+// EmitMessage writes one logical message and returns its LSN.
 func (e *Emitter) EmitMessage(ctx context.Context, prefix string, content []byte) (lsn.LSN, error) {
 	if prefix == "" {
 		return 0, fmt.Errorf("%w: empty message prefix", ErrInvalidArgument)
 	}
 	if content == nil {
-		content = []byte{} // the function is strict: NULL content emits nothing
+		content = []byte{}
 	}
 	ctx, cancel := context.WithTimeout(ctx, e.o.queryTimeout)
 	defer cancel()
@@ -63,5 +59,4 @@ func (e *Emitter) EmitMessage(ctx context.Context, prefix string, content []byte
 	return at, nil
 }
 
-// Compile-time check of the port Emitter implements.
 var _ pipeline.MessageEmitter = (*Emitter)(nil)

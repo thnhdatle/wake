@@ -16,9 +16,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakesink"
 )
 
-// genTx draws one transaction's records in seq order: keyed and keyless
-// events, `t` events, schema changes (before the event they precede) and
-// forwarded messages.
 func genTx(t *rapid.T, commit lsn.LSN) []pipeline.Record {
 	var recs []pipeline.Record
 	var k, msgs uint64
@@ -26,7 +23,6 @@ func genTx(t *rapid.T, commit lsn.LSN) []pipeline.Record {
 		s := change.Source{DB: "app", Schema: "public", Table: "t" + strconv.Itoa(rapid.IntRange(0, 2).Draw(t, "table"))}
 		kind := rapid.IntRange(0, 9).Draw(t, "kind")
 		if kind == 0 {
-			// A schema change precedes the data event that takes index k.
 			sc := change.SchemaChange{ID: change.SchemaID(commit, k), Source: s}
 			recs = append(recs, pipeline.NewSchemaChangeRecord(&sc))
 		}
@@ -35,13 +31,13 @@ func genTx(t *rapid.T, commit lsn.LSN) []pipeline.Record {
 			m := change.Message{ID: change.MessageID(commit, msgs), Transactional: true}
 			msgs++
 			recs = append(recs, pipeline.NewMessageRecord(&m))
-			continue // messages do not consume index_in_tx
+			continue
 		case 2:
 			ev := change.Event{ID: change.StreamID(commit, k), Source: s, Op: change.OpTruncate}
 			recs = append(recs, pipeline.NewEventRecord(&ev))
 		case 3:
 			ev := change.Event{ID: change.StreamID(commit, k), Source: s, Op: change.OpCreate}
-			recs = append(recs, pipeline.NewEventRecord(&ev)) // keyless: partitioned by id
+			recs = append(recs, pipeline.NewEventRecord(&ev))
 		default:
 			key := strconv.Itoa(rapid.IntRange(0, 4).Draw(t, "key"))
 			ev := change.Event{
@@ -57,9 +53,6 @@ func genTx(t *rapid.T, commit lsn.LSN) []pipeline.Record {
 
 func partitionKey(r *pipeline.Record) string { return r.Source.QualifiedName() + "|" + string(r.Key) }
 
-// routeWorkload builds random sinks, routes random transactions through a
-// Router and returns, per sink, the records it received and the ids it
-// should have received in routing order.
 func routeWorkload(t *rapid.T) (received [][]pipeline.Record, expected [][]change.ID) {
 	tr, err := NewAckTracker(1)
 	require.NoError(t, err)
@@ -104,7 +97,6 @@ func routeWorkload(t *rapid.T) (received [][]pipeline.Record, expected [][]chang
 	return received, expected
 }
 
-// wantsRecord is the routing rule stated independently of the Router.
 func wantsRecord(f pipeline.TableFilter, rec *pipeline.Record) bool {
 	if rec.Kind == pipeline.RecordKindMessage {
 		return !f.IsEmpty()
@@ -112,12 +104,6 @@ func wantsRecord(f pipeline.TableFilter, rec *pipeline.Record) bool {
 	return f.Match(rec.Table())
 }
 
-// TestRouter_Property_PerKeyOrder is the router per-key order
-// property: for random
-// workloads routed to sinks with random globs and then scheduled into random
-// webhook lanes with random completion order, every sink receives its
-// records in routing order, records of one (table, key) reach their lane in
-// seq order, and barriers are ordered relative to everything.
 func TestRouter_Property_PerKeyOrder(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
@@ -133,9 +119,6 @@ func TestRouter_Property_PerKeyOrder(t *testing.T) {
 	})
 }
 
-// laneCheck pushes a sink's records through a LaneScheduler with random
-// lanes, limits and completion order and checks per-key seq order and
-// barrier isolation.
 type laneCheck struct {
 	t          *rapid.T
 	recs       []pipeline.Record

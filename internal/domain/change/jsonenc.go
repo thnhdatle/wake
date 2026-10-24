@@ -15,10 +15,6 @@ import (
 
 const hexDigits = "0123456789abcdef"
 
-// AppendString appends s as a JSON string with the escaping of
-// encoding/json under SetEscapeHTML(false): '<', '>' and '&' stay literal,
-// control characters, U+2028 and U+2029 are escaped and each invalid UTF-8
-// byte becomes a literal U+FFFD.
 func AppendString(dst []byte, s string) []byte {
 	dst = append(dst, '"')
 	start := 0
@@ -50,9 +46,6 @@ func AppendString(dst []byte, s string) []byte {
 	return append(dst, '"')
 }
 
-// AppendStringBytes is AppendString for text held in a byte slice. Text
-// that needs no escaping, the common case, is appended without the copy a
-// string conversion makes.
 func AppendStringBytes(dst, b []byte) []byte {
 	i := plainPrefixBytes(b)
 	for i < len(b) && plainByte(b[i]) {
@@ -66,9 +59,6 @@ func AppendStringBytes(dst, b []byte) []byte {
 	return append(dst, '"')
 }
 
-// plainPrefix returns the length of the leading 8-byte blocks of s that
-// AppendString copies verbatim (plainWord); bytes after it go through the
-// byte loop.
 func plainPrefix(s string) int {
 	i := 0
 	for i+8 <= len(s) {
@@ -82,7 +72,6 @@ func plainPrefix(s string) int {
 	return i
 }
 
-// plainPrefixBytes is plainPrefix for a byte slice.
 func plainPrefixBytes(b []byte) int {
 	i := 0
 	for i+8 <= len(b) && plainWord(binary.LittleEndian.Uint64(b[i:])) {
@@ -91,20 +80,13 @@ func plainPrefixBytes(b []byte) int {
 	return i
 }
 
-// plainByte reports whether AppendString copies b verbatim.
 func plainByte(b byte) bool { return b >= 0x20 && b < utf8.RuneSelf && b != '"' && b != '\\' }
 
-// SWAR constants: 0x01 and 0x80 in every byte.
 const (
 	swarOnes = 0x0101010101010101
 	swarHigh = 0x8080808080808080
 )
 
-// plainWord reports whether all 8 bytes of v are ASCII that a JSON string
-// carries verbatim: no byte >= 0x80, below 0x20, '"' or '\\'. Once every
-// byte is below 0x80, subtracting n from each byte sets a high bit exactly
-// when some byte is below n (no borrow crosses a byte that is >= n), so the
-// result equals testing the bytes one by one.
 func plainWord(v uint64) bool {
 	quote := v ^ (swarOnes * '"')
 	backslash := v ^ (swarOnes * '\\')
@@ -130,11 +112,6 @@ func appendEscapedByte(dst []byte, b byte) []byte {
 	}
 }
 
-// AppendCanonicalKey appends the canonical CDC event key JSON of key: an object
-// whose names are sorted by Unicode code point, without whitespace or HTML
-// escaping, with nested objects canonicalised the same way and numbers kept
-// verbatim. A nil key appends null. Values must be valid JSON; invalid values
-// are appended verbatim (the type mapping never produces them).
 func AppendCanonicalKey(dst []byte, key Row) []byte {
 	if key == nil {
 		return append(dst, "null"...)
@@ -159,7 +136,6 @@ func AppendCanonicalKey(dst []byte, key Row) []byte {
 	return append(dst, '}')
 }
 
-// CanonicalValue returns the canonical form of one JSON value.
 func CanonicalValue(raw []byte) ([]byte, error) {
 	if !json.Valid(raw) {
 		return nil, fmt.Errorf("%w: %q", ErrInvalidJSON, raw)
@@ -167,8 +143,6 @@ func CanonicalValue(raw []byte) ([]byte, error) {
 	return appendCanonicalValue(nil, raw), nil
 }
 
-// compareNames orders strings by Unicode code point, which for valid UTF-8
-// equals byte order.
 func compareNames(a, b string) int {
 	switch {
 	case a < b:
@@ -193,8 +167,6 @@ func appendCanonicalValue(dst, raw []byte) []byte {
 	return appendCanonicalAny(dst, v)
 }
 
-// isCanonicalScalar reports whether raw is a scalar already in canonical
-// form, which is the case for every scalar the type mapping produces.
 func isCanonicalScalar(raw []byte) bool {
 	if len(raw) == 0 {
 		return false
@@ -251,7 +223,6 @@ func appendCanonicalAny(dst []byte, v any) []byte {
 	}
 }
 
-// appendRow appends a row image as a JSON object in column order.
 func appendRow(dst []byte, r Row) []byte {
 	if r == nil {
 		return append(dst, "null"...)
@@ -278,7 +249,7 @@ func appendSource(dst []byte, s Source) []byte {
 	return append(dst, '}')
 }
 
-// AppendJSON appends the CDC event JSON encoding of the event.
+// AppendJSON appends the event as JSON.
 func (e *Event) AppendJSON(dst []byte) []byte {
 	dst = append(dst, `{"id":"`...)
 	dst = e.ID.AppendText(dst)
@@ -316,7 +287,6 @@ func (e *Event) AppendJSON(dst []byte) []byte {
 	return append(dst, '}')
 }
 
-// AppendJSON appends the schema-change event encoding.
 func (s *SchemaChange) AppendJSON(dst []byte) []byte {
 	dst = append(dst, `{"type":"schema_change","id":"`...)
 	dst = s.ID.AppendText(dst)
@@ -357,7 +327,6 @@ func appendColumnTypes(dst []byte, cols []ColumnType) []byte {
 	return append(dst, ']')
 }
 
-// AppendJSON appends the forwarded logical message encoding.
 func (m *Message) AppendJSON(dst []byte) []byte {
 	dst = append(dst, `{"type":"message","id":"`...)
 	dst = m.ID.AppendText(dst)
@@ -374,8 +343,6 @@ func (m *Message) AppendJSON(dst []byte) []byte {
 	return append(dst, `"}`...)
 }
 
-// AppendBase64 appends the standard padded base64 encoding of b, the form
-// used for bytea values and message content.
 func AppendBase64(dst, b []byte) []byte {
 	return base64.StdEncoding.AppendEncode(dst, b)
 }

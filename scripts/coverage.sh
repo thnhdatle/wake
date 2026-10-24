@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Merged unit + integration coverage with thresholds.
-# Whole repo >= 80%, internal/domain + internal/app >= 90%.
-# Excluded: cmd/, bench/, acceptance/, examples/, *_gen.go, *.pb.go.
+# Merges unit and integration coverage and checks the thresholds.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=scripts/lib.sh
@@ -22,7 +20,6 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# The race detector needs cgo outside macOS; release builds stay CGO-free.
 CGO_ENABLED=1 go test -race -count=1 -covermode=atomic -coverpkg=./... -coverprofile="$tmp/unit.out" ./...
 
 profiles=("$tmp/unit.out")
@@ -34,7 +31,6 @@ else
 	echo "coverage: no integration tests, unit profile only"
 fi
 
-# Merge: a block counts as covered when any profile covers it. Drop excluded files.
 awk -v mod="$MODULE" '
 	FNR == 1 { next }
 	{
@@ -53,13 +49,13 @@ awk -v mod="$MODULE" '
 			sub(/:.*/, "", f)
 			rel = f
 			sub("^" mod "/", "", rel)
-			if (rel ~ /^(cmd|bench|acceptance|examples|research)\//) next
+			if (rel ~ /^(cmd|examples)\//) next
 			if (rel ~ /(_gen\.go|\.pb\.go)$/) next
 			print
 		}
 	' >"$tmp/merged.out"
 
-pct() { # pct <awk-regex on relative path or empty>
+pct() {
 	awk -v mod="$MODULE" -v re="$1" '
 		NR == 1 { next }
 		{
@@ -78,7 +74,7 @@ pct() { # pct <awk-regex on relative path or empty>
 }
 
 fail=0
-check() { # check <label> <value> <min>
+check() {
 	if [ "$2" = none ]; then
 		echo "coverage: $1: no statements to measure"
 	elif awk -v v="$2" -v m="$3" 'BEGIN { exit !(v + 0 >= m + 0) }'; then

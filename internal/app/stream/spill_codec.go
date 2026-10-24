@@ -11,18 +11,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// spillFormat is the first byte of every spilled record.
 const spillFormat = 1
 
-// appendSpillRecord appends the spill encoding of rec (every field except
-// the AckHandle, which is assigned when the record is routed):
-//
-//	format u8 | kind u8 | op str | id lsn u64, kind u8, run uvarint, n uvarint |
-//	source db, schema, table str | destination str | key nullable bytes |
-//	barrier u8 | payload bytes | schema version uvarint | ts_ms varint
-//
-// where str and bytes are a uvarint length followed by the bytes, and a
-// nullable value stores length+1 (0 for nil).
 func appendSpillRecord(dst []byte, rec *pipeline.Record) []byte {
 	dst = append(dst, spillFormat, byte(rec.Kind))
 	dst = appendSpillString(dst, string(rec.Op))
@@ -56,7 +46,6 @@ func appendSpillString(dst []byte, s string) []byte {
 	return append(dst, s...)
 }
 
-// spillReader decodes one spilled record; the first error sticks.
 type spillReader struct {
 	buf []byte
 	err error
@@ -114,7 +103,6 @@ func (r *spillReader) varint(what string) int64 {
 	return v
 }
 
-// bytes returns a copy of the next n bytes.
 func (r *spillReader) bytes(n uint64, what string) []byte {
 	if r.err != nil || n > uint64(len(r.buf)) {
 		r.fail(what)
@@ -131,8 +119,6 @@ func (r *spillReader) string(what string) string {
 	return string(r.bytes(n, what))
 }
 
-// decodeSpillRecord decodes a record written by appendSpillRecord. The
-// result owns its memory: data may be reused after the call.
 func decodeSpillRecord(data []byte) (pipeline.Record, error) {
 	r := &spillReader{buf: data}
 	if f := r.byte("format"); r.err == nil && f != spillFormat {
@@ -165,8 +151,6 @@ func decodeSpillRecord(data []byte) (pipeline.Record, error) {
 	return rec, nil
 }
 
-// recordSize is the memory accounting size of a buffered record: its
-// encoded payload and key plus a fixed overhead for the other fields.
 func recordSize(rec *pipeline.Record) int64 {
 	const overhead = 128
 	return int64(len(rec.Payload)+len(rec.Key)+len(rec.Destination)) + overhead

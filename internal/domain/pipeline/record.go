@@ -6,59 +6,35 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/change"
 )
 
-// RecordKind tells what a Record carries.
 type RecordKind uint8
 
 const (
-	// RecordKindEvent is a CDC row change event.
 	RecordKindEvent RecordKind = iota + 1
-	// RecordKindSchemaChange is a schema-change event.
 	RecordKindSchemaChange
-	// RecordKindMessage is a forwarded logical message.
 	RecordKindMessage
 )
 
-// Destination suffixes of records that do not go to a table's destination.
 const (
-	// DestinationSchema receives schema-change events (`<prefix>._schema`).
-	DestinationSchema = "_schema"
-	// DestinationMessages receives forwarded messages (`<prefix>._messages`).
+	DestinationSchema   = "_schema"
 	DestinationMessages = "_messages"
 )
 
-// Record is what the router hands to a sink: one event, schema change or
-// forwarded message, already encoded. Payload and Key are shared by every
-// sink the record is routed to and must not be modified.
+// Record is one routed event, schema change or message.
 type Record struct {
-	Kind RecordKind
-	ID   change.ID
-	// Op is the event operation; empty for other kinds.
-	Op change.Op
-	// Source is the table of an event or schema change; zero for messages.
-	Source change.Source
-	// Destination is the topic or subject suffix: "<schema>.<table>",
-	// DestinationSchema or DestinationMessages.
-	Destination string
-	// Key is the transport key (Kafka record key): the canonical key JSON;
-	// the id for events of unkeyed tables (key: null); the canonical JSON of
-	// {"schema","table"} for schema changes; nil for `t` events and messages.
-	Key []byte
-	// Barrier marks records without a partition key (schema changes, `t`
-	// events, messages): lanes flush before them and resume after them.
-	Barrier bool
-	// Payload is the record's JSON encoding.
-	Payload []byte
-	// SchemaVersion is the table's schema version; zero for messages.
+	Kind          RecordKind
+	ID            change.ID
+	Op            change.Op
+	Source        change.Source
+	Destination   string
+	Key           []byte
+	Barrier       bool
+	Payload       []byte
 	SchemaVersion uint64
-	// TsMs is the record's ts_ms, for the end-to-end latency metric.
-	TsMs int64
-	// Ack acknowledges this record's delivery to the sink that received it.
-	Ack AckHandle
+	TsMs          int64
+	Ack           AckHandle
 }
 
-// NewEventRecord encodes a row change event. Its partition key is the
-// canonical key JSON, or the id when the key is null; a `t` event is a
-// barrier.
+// NewEventRecord wraps a change event in a Record.
 func NewEventRecord(ev *change.Event) Record {
 	buf := ev.AppendJSON(make([]byte, 0, 256))
 	n := len(buf)
@@ -87,8 +63,6 @@ func NewEventRecord(ev *change.Event) Record {
 	return rec
 }
 
-// NewSchemaChangeRecord encodes a schema-change event: a barrier keyed by
-// the canonical JSON of {"schema","table"} for its Kafka record.
 func NewSchemaChangeRecord(sc *change.SchemaChange) Record {
 	buf := sc.AppendJSON(make([]byte, 0, 256))
 	n := len(buf)
@@ -110,7 +84,6 @@ func NewSchemaChangeRecord(sc *change.SchemaChange) Record {
 	}
 }
 
-// NewMessageRecord encodes a forwarded logical message, a barrier.
 func NewMessageRecord(m *change.Message) Record {
 	return Record{
 		Kind:        RecordKindMessage,
@@ -122,8 +95,6 @@ func NewMessageRecord(m *change.Message) Record {
 	}
 }
 
-// PartitionKey returns the key that selects the record's partition, subject
-// or lane, or nil for a barrier.
 func (r *Record) PartitionKey() []byte {
 	if r.Barrier {
 		return nil
@@ -131,8 +102,6 @@ func (r *Record) PartitionKey() []byte {
 	return r.Key
 }
 
-// Table returns the qualified table name used for routing, or "" for
-// messages.
 func (r *Record) Table() string {
 	if r.Kind == RecordKindMessage {
 		return ""

@@ -9,9 +9,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/change"
 )
 
-// benchEvents returns the benchmark events with values already mapped to
-// JSON: the insert of the throughput acceptance test (bigint key, ~170-byte text payload) and a wide
-// update of ten mixed columns whose TOASTed doc column is unchanged.
 func benchEvents() []struct {
 	name string
 	ev   change.Event
@@ -49,8 +46,6 @@ func benchEvents() []struct {
 	}{{"narrow_insert", narrow}, {"wide_update_toast", wide}}
 }
 
-// BenchmarkEvent_AppendJSON encodes one event to CDC event JSON into a reused
-// buffer.
 func BenchmarkEvent_AppendJSON(b *testing.B) {
 	for _, bc := range benchEvents() {
 		b.Run(bc.name, func(b *testing.B) {
@@ -64,8 +59,6 @@ func BenchmarkEvent_AppendJSON(b *testing.B) {
 	}
 }
 
-// BenchmarkAppendString_Payload escapes a ~170-byte ASCII text value, the
-// dominant cost of the throughput acceptance test row.
 func BenchmarkAppendString_Payload(b *testing.B) {
 	s := strings.Repeat("x", 168)
 	buf := change.AppendString(nil, s)

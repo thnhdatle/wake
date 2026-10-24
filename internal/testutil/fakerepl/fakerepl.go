@@ -12,18 +12,15 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// ErrClosed is returned by Receive once Close was called and every scripted
-// message was received.
 var ErrClosed = errors.New("fakerepl: closed")
 
-// Source is the fake. It is safe for concurrent use; SendStandbyStatus may
-// run while another goroutine is blocked in Receive, as the port requires.
+// Source is an in-memory replication source.
 type Source struct {
 	msgs   chan pipeline.ReplicationMessage
 	closed chan struct{}
 	once   sync.Once
 
-	mu       sync.Mutex // protects every field below
+	mu       sync.Mutex
 	system   pipeline.SystemInfo
 	slot     pipeline.SlotInfo
 	slotErr  error
@@ -32,11 +29,10 @@ type Source struct {
 	started  []pipeline.StartOptions
 	statuses []pipeline.StandbyStatus
 	sendErr  error
-	changed  chan struct{} // closed and replaced on every status sent
+	changed  chan struct{}
 }
 
-// New returns a source whose scripted message queue holds up to capacity
-// messages (Push blocks beyond that); values below 1 mean 1.
+// New returns a source whose message queue holds up to capacity messages.
 func New(capacity int) *Source {
 	return &Source{
 		msgs:    make(chan pipeline.ReplicationMessage, max(capacity, 1)),
@@ -45,29 +41,24 @@ func New(capacity int) *Source {
 	}
 }
 
-// SetSystem sets the IdentifySystem result.
 func (s *Source) SetSystem(info pipeline.SystemInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.system = info
 }
 
-// SetSlot sets the CreateSlot result (its Name is replaced by the requested
-// name) and error.
 func (s *Source) SetSlot(info pipeline.SlotInfo, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.slot, s.slotErr = info, err
 }
 
-// IdentifySystem implements pipeline.SlotManager.
 func (s *Source) IdentifySystem(_ context.Context) (pipeline.SystemInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.system, nil
 }
 
-// CreateSlot implements pipeline.SlotManager.
 func (s *Source) CreateSlot(_ context.Context, name string) (pipeline.SlotInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -80,7 +71,6 @@ func (s *Source) CreateSlot(_ context.Context, name string) (pipeline.SlotInfo, 
 	return info, nil
 }
 
-// DropSlot implements pipeline.SlotManager.
 func (s *Source) DropSlot(_ context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -88,14 +78,12 @@ func (s *Source) DropSlot(_ context.Context, name string) error {
 	return nil
 }
 
-// Slots returns the names passed to CreateSlot and DropSlot.
 func (s *Source) Slots() (created, dropped []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.created), slices.Clone(s.dropped)
 }
 
-// StartReplication implements pipeline.ReplicationSource.
 func (s *Source) StartReplication(_ context.Context, opts pipeline.StartOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,14 +91,12 @@ func (s *Source) StartReplication(_ context.Context, opts pipeline.StartOptions)
 	return nil
 }
 
-// Started returns the StartReplication calls.
 func (s *Source) Started() []pipeline.StartOptions {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.started)
 }
 
-// Push scripts the next message, blocking while the queue is full.
 func (s *Source) Push(ctx context.Context, msg pipeline.ReplicationMessage) error {
 	select {
 	case s.msgs <- msg:
@@ -120,10 +106,8 @@ func (s *Source) Push(ctx context.Context, msg pipeline.ReplicationMessage) erro
 	}
 }
 
-// Close ends the script: Receive returns ErrClosed once the queue is empty.
 func (s *Source) Close() { s.once.Do(func() { close(s.closed) }) }
 
-// Receive implements pipeline.ReplicationSource.
 func (s *Source) Receive(ctx context.Context) (pipeline.ReplicationMessage, error) {
 	select {
 	case m := <-s.msgs:
@@ -140,7 +124,6 @@ func (s *Source) Receive(ctx context.Context) (pipeline.ReplicationMessage, erro
 	}
 }
 
-// SendStandbyStatus implements pipeline.StandbyStatusSender.
 func (s *Source) SendStandbyStatus(_ context.Context, st pipeline.StandbyStatus) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -153,22 +136,18 @@ func (s *Source) SendStandbyStatus(_ context.Context, st pipeline.StandbyStatus)
 	return nil
 }
 
-// FailStatus makes SendStandbyStatus return err; nil restores it.
 func (s *Source) FailStatus(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sendErr = err
 }
 
-// Statuses returns the status updates sent, in order.
 func (s *Source) Statuses() []pipeline.StandbyStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.statuses)
 }
 
-// WaitStatuses blocks until at least n status updates were sent and returns
-// them.
 func (s *Source) WaitStatuses(ctx context.Context, n int) ([]pipeline.StandbyStatus, error) {
 	for {
 		s.mu.Lock()

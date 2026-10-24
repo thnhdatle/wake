@@ -17,7 +17,7 @@ func TestParseTemplate_Valid(t *testing.T) {
 		name    string
 		in      string
 		columns []string
-		render  string // with each column rendered as <column>
+		render  string
 	}{
 		{"single placeholder", "user:{id}", []string{"id"}, "user:<id>"},
 		{"two placeholders", "user:{tenant}:{id}", []string{"tenant", "id"}, "user:<tenant>:<id>"},
@@ -96,14 +96,10 @@ func TestTemplate_Render_Unresolved(t *testing.T) {
 	assert.False(t, ok, "an empty key is never rendered")
 }
 
-// escape writes s as template literal text.
 func escape(s string) string {
 	return strings.NewReplacer("{", "{{", "}", "}}").Replace(s)
 }
 
-// FuzzParseTemplate checks that the parser never panics, that a parsed
-// template round-trips through its parts and that errors carry a valid
-// offset.
 func FuzzParseTemplate(f *testing.F) {
 	for _, s := range []string{
 		"user:{id}", "user:email:{email}", "a{{b}}c", "{{{id}}}", "{", "}", "{}", "{ a}", "x{a{b}}", "",

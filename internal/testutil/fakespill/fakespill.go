@@ -12,12 +12,11 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// ErrRemoved reports a call on a removed file.
 var ErrRemoved = errors.New("fakespill: file removed")
 
-// Store is the fake. It is safe for concurrent use.
+// Store is an in-memory spill store.
 type Store struct {
-	mu         sync.Mutex // protects every field below
+	mu         sync.Mutex
 	files      map[string]*File
 	created    int
 	removed    int
@@ -29,7 +28,6 @@ type Store struct {
 // New returns an empty store.
 func New() *Store { return &Store{files: map[string]*File{}} }
 
-// Create implements pipeline.SpillStore.
 func (s *Store) Create(ctx context.Context, name string) (pipeline.SpillFile, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -45,7 +43,6 @@ func (s *Store) Create(ctx context.Context, name string) (pipeline.SpillFile, er
 	return f, nil
 }
 
-// RemoveAll implements pipeline.SpillStore: it deletes every file.
 func (s *Store) RemoveAll(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -60,7 +57,6 @@ func (s *Store) RemoveAll(ctx context.Context) error {
 	return nil
 }
 
-// Seed adds a file left behind by a crashed run.
 func (s *Store) Seed(name string, records ...[]byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -72,42 +68,36 @@ func (s *Store) Seed(name string, records ...[]byte) {
 	s.files[name] = f
 }
 
-// Files returns the names of the files that exist.
 func (s *Store) Files() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Sorted(maps.Keys(s.files))
 }
 
-// Counts returns the number of files created and removed with Remove.
 func (s *Store) Counts() (created, removed int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.created, s.removed
 }
 
-// RemoveAlls returns the number of RemoveAll calls.
 func (s *Store) RemoveAlls() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.removeAlls
 }
 
-// FailCreate makes Create return err; nil restores it.
 func (s *Store) FailCreate(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.createErr = err
 }
 
-// FailAppend makes Append return err; nil restores it.
 func (s *Store) FailAppend(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.appendErr = err
 }
 
-// File is one in-memory spill file.
 type File struct {
 	store   *Store
 	name    string
@@ -116,7 +106,6 @@ type File struct {
 	removed bool
 }
 
-// Append implements pipeline.SpillFile; it stores a copy of rec.
 func (f *File) Append(ctx context.Context, rec []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -134,8 +123,6 @@ func (f *File) Append(ctx context.Context, rec []byte) error {
 	return nil
 }
 
-// Replay implements pipeline.SpillFile. fn receives a scratch copy that is
-// overwritten after the call, like a file reader's buffer.
 func (f *File) Replay(ctx context.Context, fn func(rec []byte) error) error {
 	f.store.mu.Lock()
 	if f.removed {
@@ -158,14 +145,12 @@ func (f *File) Replay(ctx context.Context, fn func(rec []byte) error) error {
 	return nil
 }
 
-// Size implements pipeline.SpillFile.
 func (f *File) Size() int64 {
 	f.store.mu.Lock()
 	defer f.store.mu.Unlock()
 	return f.size
 }
 
-// Remove implements pipeline.SpillFile.
 func (f *File) Remove() error {
 	f.store.mu.Lock()
 	defer f.store.mu.Unlock()

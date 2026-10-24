@@ -17,12 +17,10 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// txState is the transaction being assembled.
 type txState struct {
-	open  bool
-	skip  bool
-	begin pgoutput.Begin
-	// index is the next index_in_tx; msgN the next message counter.
+	open     bool
+	skip     bool
+	begin    pgoutput.Begin
 	index    uint64
 	msgN     uint64
 	captured bool
@@ -72,7 +70,7 @@ func (r *Reader) handleXLogData(ctx context.Context, x *pipeline.XLogData) error
 		return r.truncate(ctx, m)
 	case *pgoutput.LogicalMessage:
 		return r.message(ctx, m, x.ServerTime)
-	default: // Origin and Type messages need no action here.
+	default:
 		return nil
 	}
 }
@@ -81,8 +79,6 @@ func (r *Reader) begin(m *pgoutput.Begin) error {
 	if r.tx.open {
 		return fmt.Errorf("%w: begin of %s inside %s", ErrProtocol, m.FinalLSN, r.tx.begin.FinalLSN)
 	}
-	// A transaction whose commit record starts before the start LSN ends at
-	// or before it: it was confirmed by an earlier run.
 	skip := m.FinalLSN < r.cfg.Start
 	r.tx = txState{open: true, skip: skip, begin: *m, buf: r.tx.buf}
 	r.tx.buf.reset(m.FinalLSN, m.XID)
@@ -148,8 +144,6 @@ func (r *Reader) relation(ctx context.Context, m *pgoutput.Relation) error {
 	return nil
 }
 
-// overrideKey sets the primary key of a REPLICA IDENTITY FULL table as its
-// CDC event key; without a primary key every column stays the key.
 func (r *Reader) overrideKey(ctx context.Context, rel *schema.Relation) error {
 	if rel.Identity != schema.IdentityFull || r.keys == nil {
 		return nil
@@ -161,8 +155,6 @@ func (r *Reader) overrideKey(ctx context.Context, rel *schema.Relation) error {
 	return r.dec.SetKeyColumns(rel.OID, keys)
 }
 
-// capturedRelation returns the entry of a relation whose change is
-// emitted; emit is false for skipped transactions and uncaptured tables.
 func (r *Reader) capturedRelation(oid uint32) (e *relEntry, emit bool, err error) {
 	if !r.tx.open {
 		return nil, false, fmt.Errorf("%w: change of relation %d outside a transaction", ErrProtocol, oid)
@@ -201,8 +193,6 @@ func (r *Reader) row(ctx context.Context, m pgoutput.Message, oid uint32) error 
 	return nil
 }
 
-// beforeKey returns the canonical before replica-identity key of an update
-// that carried an old tuple when it differs from the new key, else nil.
 func beforeKey(m pgoutput.Message, e *relEntry, img *pgoutput.RowImages, key []byte) []byte {
 	u, ok := m.(*pgoutput.Update)
 	if !ok || u.OldKind == pgoutput.OldNone || len(e.keyCols) == 0 {
@@ -223,15 +213,12 @@ func beforeKey(m pgoutput.Message, e *relEntry, img *pgoutput.RowImages, key []b
 	return before
 }
 
-// buffer adds a captured event to the transaction; it consumes an
-// index_in_tx.
 func (r *Reader) buffer(ctx context.Context, rec *pipeline.Record) error {
 	r.tx.index++
 	r.tx.captured = true
 	return r.add(ctx, rec)
 }
 
-// add adds a record to the transaction, logging when it starts spilling.
 func (r *Reader) add(ctx context.Context, rec *pipeline.Record) error {
 	started, err := r.tx.buf.add(ctx, rec)
 	if err != nil {
@@ -247,8 +234,6 @@ func (r *Reader) add(ctx context.Context, rec *pipeline.Record) error {
 	return nil
 }
 
-// emitPendingSchema buffers the schema-change event of the relation, if
-// any, before its next data event: same commit LSN and index_in_tx.
 func (r *Reader) emitPendingSchema(ctx context.Context, oid uint32, e *relEntry) error {
 	obs, ok := r.pendingSchema[oid]
 	if !ok {
@@ -327,9 +312,6 @@ func (r *Reader) message(ctx context.Context, m *pgoutput.LogicalMessage, server
 	}
 }
 
-// internalMessage hands wake.watermark and wake.snapshot messages of a
-// transaction to the observer; other wake.* messages (heartbeats) are
-// consumed without effect.
 func (r *Reader) internalMessage(m *pgoutput.LogicalMessage) {
 	if !m.Transactional() || r.tx.skip || r.observer == nil {
 		return
@@ -339,9 +321,6 @@ func (r *Reader) internalMessage(m *pgoutput.LogicalMessage) {
 	}
 }
 
-// messageTx returns the single-record transaction of a forwarded
-// non-transactional message at its LSN; its ts_ms is the server time
-// of the XLogData message.
 func (r *Reader) messageTx(m *pgoutput.LogicalMessage, serverTime time.Time) *assembledTx {
 	var tsMs int64
 	if !serverTime.IsZero() {
@@ -354,7 +333,6 @@ func (r *Reader) messageTx(m *pgoutput.LogicalMessage, serverTime time.Time) *as
 	}
 }
 
-// logSkip logs a skipped table once per table and reason.
 func (r *Reader) logSkip(ctx context.Context, table string, reason pipeline.SkipReason) {
 	if r.skipLogged[table] == reason {
 		return
@@ -373,8 +351,6 @@ func (r *Reader) logSkip(ctx context.Context, table string, reason pipeline.Skip
 		slog.String("table", table), slog.String("error", string(reason)))
 }
 
-// warnUnknownTypes logs and counts each column type outside the type
-// mapping once.
 func (r *Reader) warnUnknownTypes(ctx context.Context, rel *schema.Relation) {
 	for _, oid := range rel.UnknownTypes() {
 		if r.warnedTypes[oid] {
@@ -395,8 +371,6 @@ func (r *Reader) warnUnknownTypes(ctx context.Context, rel *schema.Relation) {
 	}
 }
 
-// warnUnknownMessage logs and counts each unsupported message type once;
-// the message is skipped.
 func (r *Reader) warnUnknownMessage(ctx context.Context, t byte) {
 	if r.warnedMsgs[t] {
 		return

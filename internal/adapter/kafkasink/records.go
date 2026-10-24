@@ -15,50 +15,38 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Record headers (CDC event transport).
 const (
 	HeaderEventID       = "wake-event-id"
 	HeaderSchemaVersion = "wake-schema-version"
 )
 
-// batchOverhead bounds the bytes a record batch holding one record adds to
-// the record's key, value and headers: the 61-byte batch header plus the
-// record's varint framing. It turns an event size into the size the broker
-// compares with max.message.bytes.
 const batchOverhead = 128
 
-// maxReasonKey caps the key quoted in an event_too_large reason.
 const maxReasonKey = 128
 
-// unit is one pipeline.Record from Send to acknowledgement. Its writes are
-// the Kafka records it becomes: one, two for a `d` event with its tombstone,
-// one per partition for a `t` event.
 type unit struct {
 	rec      pipeline.Record
-	seq      uint64 // dispatch order, assigned by the dispatcher
-	size     int64  // event size: key, value and headers
-	reserved int64  // bytes held in the buffer semaphore
+	seq      uint64
+	size     int64
+	reserved int64
 	topic    string
 	writes   []*write
 
-	// Guarded by Sink.mu.
-	pending int       // writes not yet acknowledged
-	sentAt  time.Time // last produce attempt
+	pending int
+	sentAt  time.Time
 }
 
-// write is one Kafka record of a unit.
 type write struct {
 	u     *unit
 	idx   int
 	rec   *kgo.Record
-	retry bool // re-produced after a failure; guarded by Sink.mu
+	retry bool
 }
 
 func newUnit(rec pipeline.Record, prefix string) *unit {
 	return &unit{rec: rec, size: eventSize(&rec), topic: topicName(prefix, rec.Destination)}
 }
 
-// topicName returns `<prefix>.<destination>`.
 func topicName(prefix, destination string) string { return prefix + "." + destination }
 
 func isTruncate(rec *pipeline.Record) bool {
@@ -69,7 +57,6 @@ func hasTombstone(rec *pipeline.Record, enabled bool) bool {
 	return enabled && rec.Kind == pipeline.RecordKindEvent && rec.Op == change.OpDelete && rec.Key != nil
 }
 
-// eventSize is the size max_event_bytes limits: key, value and headers.
 func eventSize(rec *pipeline.Record) int64 {
 	var buf [64]byte
 	id := rec.ID.AppendText(buf[:0])
@@ -85,10 +72,6 @@ func headers(rec *pipeline.Record) []kgo.RecordHeader {
 	}
 }
 
-// buildWrites turns u into its Kafka records. A `t` event goes to each of
-// the topic's partitions with the same id; a `d` event is followed by a
-// tombstone (same key, null value, no headers) that hashes to the same
-// partition, so it lands right after it.
 func buildWrites(u *unit, partitions int, tombstones bool) {
 	rec := &u.rec
 	hdrs := headers(rec)
@@ -114,14 +97,10 @@ func buildWrites(u *unit, partitions int, tombstones bool) {
 	u.pending = len(u.writes)
 }
 
-// retryRecord returns a fresh copy of a failed record for re-production; it
-// keeps the partition the first attempt chose.
 func retryRecord(r *kgo.Record) *kgo.Record {
 	return &kgo.Record{Topic: r.Topic, Key: r.Key, Value: r.Value, Headers: r.Headers, Partition: r.Partition}
 }
 
-// sortWrites orders failed writes by dispatch order, so re-production keeps
-// the per-key order.
 func sortWrites(ws []*write) {
 	slices.SortFunc(ws, func(a, b *write) int {
 		if c := cmp.Compare(a.u.seq, b.u.seq); c != 0 {
@@ -131,8 +110,6 @@ func sortWrites(ws []*write) {
 	})
 }
 
-// tooLargeReason describes an event above max_event_bytes with its table,
-// key and lsn; it never contains row values.
 func tooLargeReason(rec *pipeline.Record, size, limit int64) string {
 	table := rec.Table()
 	if table == "" {

@@ -226,7 +226,6 @@ func TestPrintReport(t *testing.T) {
 	assert.Contains(t, out, "result: FAILED")
 }
 
-// fakeSource is a ReplicationSource whose calls succeed or fail on demand.
 type fakeSource struct {
 	fail error
 }
@@ -282,7 +281,6 @@ func TestRuntimeView_Starting(t *testing.T) {
 	assert.ErrorIs(t, err, errStarting)
 }
 
-// fakeLister returns the configured tables.
 type fakeLister struct {
 	names   []string
 	skipped map[string]string
@@ -293,7 +291,6 @@ func (f *fakeLister) captured(context.Context, pipeline.TableResolver) ([]string
 	return f.names, f.skipped, f.err
 }
 
-// fakeQueue records queued tables.
 type fakeQueue struct {
 	mu     sync.Mutex
 	queued [][]string

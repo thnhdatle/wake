@@ -15,29 +15,17 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// checkReplication names the replication readiness check.
 const checkReplication = "replication"
 
-// errStarting reports a status request before the pipeline is wired.
 var errStarting = errors.New("wake is starting: pre-flight checks, publication and slot setup")
 
-// activityWindowFactor × stream.status_interval is how long the replication
-// connection may go without activity before /readyz reports it.
 const activityWindowFactor = 3
 
-// replActivity wraps the replication connection and records when it last
-// showed activity: START_REPLICATION, a received message (XLogData or
-// keepalive) or a standby status update the server accepted. Status
-// updates count because an idle server sends no keepalives while Wake
-// replies every status_interval, and because reading pauses under
-// backpressure while updates continue; a broken connection fails
-// both.
 type replActivity struct {
 	src     pipeline.ReplicationSource
 	clk     clock.Clock
 	started atomic.Bool
-	// last is the Unix nanosecond time of the last activity.
-	last atomic.Int64
+	last    atomic.Int64
 }
 
 func newReplActivity(src pipeline.ReplicationSource, clk clock.Clock) *replActivity {
@@ -46,7 +34,6 @@ func newReplActivity(src pipeline.ReplicationSource, clk clock.Clock) *replActiv
 
 func (a *replActivity) touch() { a.last.Store(a.clk.Now().UnixNano()) }
 
-// StartReplication implements pipeline.ReplicationSource.
 func (a *replActivity) StartReplication(ctx context.Context, opts pipeline.StartOptions) error {
 	if err := a.src.StartReplication(ctx, opts); err != nil {
 		return err
@@ -56,7 +43,6 @@ func (a *replActivity) StartReplication(ctx context.Context, opts pipeline.Start
 	return nil
 }
 
-// Receive implements pipeline.ReplicationSource.
 func (a *replActivity) Receive(ctx context.Context) (pipeline.ReplicationMessage, error) {
 	msg, err := a.src.Receive(ctx)
 	if err == nil {
@@ -65,7 +51,6 @@ func (a *replActivity) Receive(ctx context.Context) (pipeline.ReplicationMessage
 	return msg, err
 }
 
-// SendStandbyStatus implements pipeline.StandbyStatusSender.
 func (a *replActivity) SendStandbyStatus(ctx context.Context, st pipeline.StandbyStatus) error {
 	err := a.src.SendStandbyStatus(ctx, st)
 	if err == nil {
@@ -74,7 +59,6 @@ func (a *replActivity) SendStandbyStatus(ctx context.Context, st pipeline.Standb
 	return err
 }
 
-// lastActivity returns the time of the last activity, zero before any.
 func (a *replActivity) lastActivity() time.Time {
 	ns := a.last.Load()
 	if ns == 0 {
@@ -83,8 +67,6 @@ func (a *replActivity) lastActivity() time.Time {
 	return time.Unix(0, ns)
 }
 
-// runtimeView serves /readyz and /v1/status. The pipeline is published to it
-// once wired; before that the service is starting.
 type runtimeView struct {
 	cfg config.Config
 	clk clock.Clock
@@ -97,10 +79,6 @@ func newRuntimeView(cfg config.Config, clk clock.Clock) *runtimeView {
 
 func (v *runtimeView) set(s *service) { v.svc.Store(s) }
 
-// readiness implements httpadmin.ReadinessFunc: configuration loaded,
-// replication streaming, and no sink blocked by a non-retriable error. A
-// sink retrying after retriable errors stays ready: backpressure is the
-// designed behavior and lag.max_ack_age alerts on it.
 func (v *runtimeView) readiness(context.Context) []httpadmin.Check {
 	checks := []httpadmin.Check{{Name: "config", OK: true}}
 	s := v.svc.Load()
@@ -120,7 +98,6 @@ func (v *runtimeView) readiness(context.Context) []httpadmin.Check {
 	return checks
 }
 
-// replicationCheck reports whether replication is streaming at now.
 func (s *service) replicationCheck(now time.Time) httpadmin.Check {
 	c := httpadmin.Check{Name: checkReplication, Code: codeReplicationNotStarted}
 	window := activityWindowFactor * s.cfg.Stream.StatusInterval.Std()
@@ -137,7 +114,6 @@ func (s *service) replicationCheck(now time.Time) httpadmin.Check {
 	return c
 }
 
-// status implements httpadmin.StatusFunc (GET /v1/status, `wake status`).
 func (v *runtimeView) status(ctx context.Context) (any, error) {
 	s := v.svc.Load()
 	if s == nil {

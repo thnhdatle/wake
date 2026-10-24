@@ -7,9 +7,6 @@ import (
 	"fmt"
 )
 
-// Error codes of docs/guides/errors.md produced by this package. The
-// replication codes repeat those of the replication adapter, whose errors
-// the pre-flight check reports.
 const (
 	CodePublicationPrivilege = "publication_privilege"
 	CodePublicationMissing   = "publication_missing"
@@ -28,44 +25,23 @@ const (
 )
 
 var (
-	// ErrInvalidArgument reports an invalid constructor argument, option or
-	// request.
-	ErrInvalidArgument = errors.New("pgsql: invalid argument")
-	// ErrTableNotFound reports a chunk read of a table that does not exist
-	// (or is not a table).
-	ErrTableNotFound = errors.New("pgsql: table not found")
-	// ErrBadPosition reports a ChunkRequest.After this adapter did not
-	// produce for the table, e.g. after the table's key changed.
-	ErrBadPosition = errors.New("pgsql: bad chunk position")
-	// ErrSessionClosed reports a read on a closed ChunkSession or a second
-	// Close.
-	ErrSessionClosed = errors.New("pgsql: chunk session closed")
-	// ErrPublicationPrivilege reports missing CREATE on the database, a
-	// managed publication owned by another role or matched tables the role
-	// does not own (code publication_privilege).
+	ErrInvalidArgument      = errors.New("pgsql: invalid argument")
+	ErrTableNotFound        = errors.New("pgsql: table not found")
+	ErrBadPosition          = errors.New("pgsql: bad chunk position")
+	ErrSessionClosed        = errors.New("pgsql: chunk session closed")
 	ErrPublicationPrivilege = errors.New("pgsql: publication privilege missing")
-	// ErrPublicationConflict reports a publication with a managed name that
-	// Wake cannot manage, e.g. FOR ALL TABLES (code publication_conflict).
-	ErrPublicationConflict = errors.New("pgsql: publication cannot be managed")
-	// ErrPublicationMissing reports an existing-mode publication that does
-	// not exist (code publication_missing).
-	ErrPublicationMissing = errors.New("pgsql: publication missing")
-	// ErrValue reports a column value that does not convert to CDC event JSON.
-	ErrValue = errors.New("pgsql: column value")
+	ErrPublicationConflict  = errors.New("pgsql: publication cannot be managed")
+	ErrPublicationMissing   = errors.New("pgsql: publication missing")
+	ErrValue                = errors.New("pgsql: column value")
 )
 
-// Error is a failure with an error code of docs/guides/errors.md. It matches
-// its sentinel and the underlying cause with errors.Is and errors.As.
 type Error struct {
-	// Code is the error code, e.g. publication_privilege.
-	Code string
-	// Detail explains the failure and its remediation.
+	Code   string
 	Detail string
 	kind   error
 	cause  error
 }
 
-// Error implements error.
 func (e *Error) Error() string {
 	msg := fmt.Sprintf("%v (%s): %s", e.kind, e.Code, e.Detail)
 	if e.cause != nil {
@@ -74,10 +50,8 @@ func (e *Error) Error() string {
 	return msg
 }
 
-// ErrorCode returns the error code.
 func (e *Error) ErrorCode() string { return e.Code }
 
-// Unwrap returns the sentinel and the cause.
 func (e *Error) Unwrap() []error {
 	if e.cause == nil {
 		return []error{e.kind}

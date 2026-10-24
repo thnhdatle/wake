@@ -13,9 +13,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2/l2test"
 )
 
-// The l2 contract suite, the same one the l2 fake passes, against a single
-// node, a 3-master Cluster and a TLS-only node.
-
 func TestConformance_SingleNode(t *testing.T) {
 	t.Parallel()
 	srv := redistest.StartSingle(t)

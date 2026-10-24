@@ -129,9 +129,8 @@ Postgres, sinks, snapshots and the cache library are covered in the [guides](doc
 
 ## Performance
 
-MacBook Pro M3 Pro 36 GB, macOS 26.1, Go 1.27.2; Wake runs on the host against the compose
-Postgres, Kafka and Redis. Method and full results in
-[bench/RESULTS.md](bench/RESULTS.md).
+MacBook Pro M3 Pro 36 GB, macOS 26.1, Go 1.27.2, Wake v0.1.0. Wake runs on the host against the
+compose Postgres, Kafka and Redis (Docker VM 8 CPU / 10 GB).
 
 | Scenario | Result |
 |---|---|

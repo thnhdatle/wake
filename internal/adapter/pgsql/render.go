@@ -10,18 +10,13 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// renderer converts result rows (text format) to chunk rows in CDC event JSON.
 type renderer struct {
-	table string
-	cols  []column
-	// offset is the position of the first data column in a result row.
+	table  string
+	cols   []column
 	offset int
-	// keyIdx are the positions in cols of the event key columns; nil for a
-	// keyless table.
 	keyIdx []int
 }
 
-// newRenderer prepares the rendering of the table's columns at offset.
 func newRenderer(m *tableMeta, offset int) (*renderer, error) {
 	r := &renderer{table: m.schema + "." + m.name, cols: m.cols, offset: offset}
 	for _, name := range m.eventKey() {
@@ -44,8 +39,6 @@ func columnIndex(cols []column, name string) int {
 	return -1
 }
 
-// row renders one result row: After holds every column, Key the event key
-// columns (nil for keyless tables). The values do not alias the result.
 func (r *renderer) row(values [][]byte) (pipeline.ChunkRow, error) {
 	if len(values) != r.offset+len(r.cols) {
 		return pipeline.ChunkRow{}, fmt.Errorf("pgsql: %s: row has %d values, want %d", r.table, len(values),

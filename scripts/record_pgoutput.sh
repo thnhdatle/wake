@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Records raw pgoutput messages from the compose Postgres into testdata/pgoutput/.
-# Each scenario runs against a fresh slot; the messages are read with
-# pg_logical_slot_peek_binary_changes (one row per protocol message) and written
-# as "<lsn> <xid> <hex>" lines in WAL order to testdata/pgoutput/<scenario>.hex.
-# Usage: scripts/record_pgoutput.sh   (starts and stops only the postgres service)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=scripts/lib.sh
@@ -62,7 +58,6 @@ CREATE PUBLICATION wake_record FOR TABLE rec.types, rec.docs, rec.docs_full, rec
 CREATE PUBLICATION wake_record_insert FOR TABLE rec.keyless WITH (publish = 'insert');
 SQL
 
-# scenario <name> < sql: fresh slot, run the SQL read from stdin, dump the messages.
 scenario() {
 	local name=$1
 	psql_app -c "SELECT pg_create_logical_replication_slot('$SLOT', 'pgoutput')" </dev/null >/dev/null

@@ -32,13 +32,10 @@ import (
 )
 
 var (
-	srv *pgtest.Server
-	// wakeBin is the wake binary built for the integration tests.
+	srv     *pgtest.Server
 	wakeBin string
 )
 
-// TestMain builds the binary once (with -race when the tests use it), then
-// runs the tests against one Postgres container for the package.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "wake-it-")
 	if err != nil {
@@ -62,15 +59,11 @@ func TestMain(m *testing.M) {
 }
 
 const (
-	// waitLong bounds snapshots and pipeline settling (race-built binary).
-	waitLong = 4 * time.Minute
-	// waitShort bounds readiness and single events.
+	waitLong  = 4 * time.Minute
 	waitShort = time.Minute
-	// poll is the polling interval of the eventually checks.
-	poll = 100 * time.Millisecond
+	poll      = 100 * time.Millisecond
 )
 
-// env is one test's source database, Kafka topics and Wake configuration.
 type env struct {
 	t      *testing.T
 	k      *kafkatest.Kafka
@@ -81,16 +74,12 @@ type env struct {
 	dir    string
 }
 
-// newEnv creates a database; name is the source name and topic prefix stem.
 func newEnv(t *testing.T, k *kafkatest.Kafka, name string) *env {
 	t.Helper()
 	db := srv.NewDatabase(t)
 	return &env{t: t, k: k, db: db, conn: db.Conn(t), name: name, prefix: "cdc_" + name, dir: t.TempDir()}
 }
 
-// config returns the test's base configuration: managed mode over
-// public.*, one Kafka sink with topic auto-creation, fast status and lag
-// intervals, small snapshot chunks.
 func (e *env) config() config.Config {
 	cfg := config.Default()
 	cfg.Source.Name = e.name
@@ -115,7 +104,6 @@ func (e *env) config() config.Config {
 	return cfg
 }
 
-// writeConfig validates cfg and writes it as YAML; it returns the path.
 func (e *env) writeConfig(cfg *config.Config) string {
 	e.t.Helper()
 	p := filepath.Join(e.dir, fmt.Sprintf("wake-%d.yaml", time.Now().UnixNano()))
@@ -123,7 +111,6 @@ func (e *env) writeConfig(cfg *config.Config) string {
 	return p
 }
 
-// rewriteConfig validates cfg and writes it as YAML to path.
 func (e *env) rewriteConfig(path string, cfg *config.Config) {
 	e.t.Helper()
 	require.NoError(e.t, cfg.Validate())
@@ -141,14 +128,12 @@ func freeAddr(t *testing.T) string {
 	return addr
 }
 
-// exec runs SQL on the test's connection.
 func (e *env) exec(sql string) {
 	e.t.Helper()
 	_, err := e.conn.Exec(e.t.Context(), sql)
 	require.NoError(e.t, err, sql)
 }
 
-// currentLSN returns pg_current_wal_lsn().
 func (e *env) currentLSN() lsn.LSN {
 	e.t.Helper()
 	var s string
@@ -158,7 +143,6 @@ func (e *env) currentLSN() lsn.LSN {
 	return l
 }
 
-// slotRow reads the test's slot from pg_replication_slots.
 func (e *env) slotRow() (exists, active bool, confirmed lsn.LSN) {
 	e.t.Helper()
 	var s *string
@@ -175,19 +159,16 @@ func (e *env) slotRow() (exists, active bool, confirmed lsn.LSN) {
 	return true, active, confirmed
 }
 
-// wakeProc is one `wake` process.
 type wakeProc struct {
-	t     *testing.T
-	cmd   *exec.Cmd
-	admin string
-	// cfgPath is the configuration file of `wake run`.
+	t       *testing.T
+	cmd     *exec.Cmd
+	admin   string
 	cfgPath string
 	log     string
 	done    chan struct{}
 	err     error
 }
 
-// startWake starts `wake run` with cfg.
 func (e *env) startWake(cfg *config.Config) *wakeProc {
 	e.t.Helper()
 	path := e.writeConfig(cfg)
@@ -196,7 +177,6 @@ func (e *env) startWake(cfg *config.Config) *wakeProc {
 	return p
 }
 
-// spawn starts the binary with args and the source DSN in the environment.
 func (e *env) spawn(args ...string) *wakeProc {
 	e.t.Helper()
 	logPath := filepath.Join(e.dir, fmt.Sprintf("wake-%d.log", time.Now().UnixNano()))
@@ -219,7 +199,6 @@ func (e *env) spawn(args ...string) *wakeProc {
 	return p
 }
 
-// terminate sends SIGTERM and waits; after the shutdown bound it kills.
 func (p *wakeProc) terminate() {
 	if p.exited() {
 		return
@@ -233,14 +212,12 @@ func (p *wakeProc) terminate() {
 	}
 }
 
-// stop sends SIGTERM and requires a clean exit (code 0).
 func (p *wakeProc) stop() {
 	p.t.Helper()
 	p.terminate()
 	require.NoError(p.t, p.err, "wake exit\n%s", p.tail())
 }
 
-// kill sends SIGKILL and waits for the process to end.
 func (p *wakeProc) kill() {
 	_ = p.cmd.Process.Kill()
 	<-p.done
@@ -255,7 +232,6 @@ func (p *wakeProc) exited() bool {
 	}
 }
 
-// wait waits for the process to exit on its own and returns its exit code.
 func (p *wakeProc) wait(timeout time.Duration) int {
 	p.t.Helper()
 	select {
@@ -271,7 +247,6 @@ func (p *wakeProc) wait(timeout time.Duration) int {
 	return 0
 }
 
-// output returns the process' combined output.
 func (p *wakeProc) output() string {
 	b, err := os.ReadFile(p.log)
 	require.NoError(p.t, err)
@@ -289,8 +264,6 @@ func (p *wakeProc) tail() string {
 	return string(b)
 }
 
-// checkLog fails the test on a data race report and prints the log tail of
-// a failed test.
 func (p *wakeProc) checkLog() {
 	out, err := os.ReadFile(p.log)
 	if err != nil {
@@ -304,8 +277,6 @@ func (p *wakeProc) checkLog() {
 	}
 }
 
-// get issues GET on the admin server and returns status and body; status 0
-// means unreachable.
 func (p *wakeProc) get(path string) (int, []byte) {
 	ctx, cancel := context.WithTimeout(p.t.Context(), 5*time.Second)
 	defer cancel()
@@ -321,7 +292,6 @@ func (p *wakeProc) get(path string) (int, []byte) {
 	return resp.StatusCode, body
 }
 
-// status returns GET /v1/status, or false while it is unavailable.
 func (p *wakeProc) status() (statusDoc, bool) {
 	code, body := p.get("/v1/status")
 	if code != http.StatusOK {
@@ -332,7 +302,6 @@ func (p *wakeProc) status() (statusDoc, bool) {
 	return doc, true
 }
 
-// waitReady waits until /readyz answers 200.
 func (p *wakeProc) waitReady() {
 	p.t.Helper()
 	p.waitFor(waitShort, "ready", func() bool {
@@ -341,7 +310,6 @@ func (p *wakeProc) waitReady() {
 	})
 }
 
-// waitFor polls cond until it holds; it fails early when wake exits.
 func (p *wakeProc) waitFor(timeout time.Duration, what string, cond func() bool) {
 	p.t.Helper()
 	deadline := time.NewTimer(timeout)
@@ -359,7 +327,6 @@ func (p *wakeProc) waitFor(timeout time.Duration, what string, cond func() bool)
 	}
 }
 
-// waitSnapshotsIdle waits until no snapshot run is unfinished or queued.
 func (p *wakeProc) waitSnapshotsIdle() {
 	p.t.Helper()
 	p.waitFor(waitLong, "snapshots to finish", func() bool {
@@ -369,8 +336,6 @@ func (p *wakeProc) waitSnapshotsIdle() {
 	})
 }
 
-// sync emits a logical message no sink receives and waits until the
-// confirmed LSN passed it: everything committed before is acknowledged.
 func (e *env) sync(p *wakeProc) {
 	e.t.Helper()
 	var s string
@@ -388,8 +353,6 @@ func (e *env) sync(p *wakeProc) {
 	})
 }
 
-// metric returns the value of a sample of /metrics ("name{labels}" exact
-// prefix match), or 0 when absent.
 func (p *wakeProc) metric(series string) float64 {
 	_, body := p.get("/metrics")
 	for _, line := range strings.Split(string(body), "\n") {
@@ -403,7 +366,6 @@ func (p *wakeProc) metric(series string) float64 {
 	return 0
 }
 
-// runCLI runs a short wake command and returns its exit code and output.
 func (e *env) runCLI(args ...string) (int, string) {
 	e.t.Helper()
 	ctx, cancel := context.WithTimeout(e.t.Context(), waitShort)
@@ -421,7 +383,6 @@ func (e *env) runCLI(args ...string) (int, string) {
 	return 0, out.String()
 }
 
-// syncWriter serializes access to a mutex-protected slice for tests.
 type syncList[T any] struct {
 	mu    sync.Mutex
 	items []T
@@ -439,5 +400,4 @@ func (l *syncList[T]) all() []T {
 	return append([]T(nil), l.items...)
 }
 
-// lsnOf parses an LSN of the status document.
 func lsnOf(s string) (lsn.LSN, error) { return lsn.Parse(s) }

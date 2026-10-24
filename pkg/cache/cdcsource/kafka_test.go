@@ -18,8 +18,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// fakeKafka is a scripted kafkaClient: PollRecords returns the scripted
-// fetches in order, then blocks until ctx ends.
 type fakeKafka struct {
 	mu        sync.Mutex
 	polls     []kgo.Fetches
@@ -28,9 +26,8 @@ type fakeKafka struct {
 	pingErr   error
 	allowed   int
 	closed    bool
-	// idle is closed when the script is exhausted.
-	idle     chan struct{}
-	idleOnce sync.Once
+	idle      chan struct{}
+	idleOnce  sync.Once
 }
 
 func newFakeKafka(polls ...kgo.Fetches) *fakeKafka {
@@ -102,7 +99,6 @@ func newTestKafkaSource(t *testing.T, cl *fakeKafka) *KafkaSource {
 	return s
 }
 
-// recorder is a Handler recording the batches it was given.
 type recorder struct {
 	mu      sync.Mutex
 	batches [][][]byte
@@ -174,7 +170,7 @@ func TestKafkaSource_Consume_CommitsAfterHandler(t *testing.T) {
 	payload := evt("c", "public.users", `{"id":1}`, "null", `{"id":1}`)
 	cl := newFakeKafka(
 		fetchOf(0, nil, payload, nil),
-		fetchOf(1, nil), // empty poll
+		fetchOf(1, nil),
 	)
 	s := newTestKafkaSource(t, cl)
 	var rec recorder
@@ -272,8 +268,6 @@ func TestKafkaSource_Consume_ClientError(t *testing.T) {
 	require.EqualError(t, s.Consume(t.Context(), (&recorder{}).handle), "bad options")
 }
 
-// TestKafkaSource_Consume_RealClientUnreachable runs the franz-go client
-// against a closed port: Consume keeps polling and returns nil when ctx ends.
 func TestKafkaSource_Consume_RealClientUnreachable(t *testing.T) {
 	t.Parallel()
 	var lc net.ListenConfig

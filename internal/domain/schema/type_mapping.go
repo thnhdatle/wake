@@ -11,15 +11,7 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/change"
 )
 
-// AppendJSON appends the compact JSON form of one column value to dst. text
-// is the value's Postgres text output (pgoutput 't' column data) for type
-// typeOID; SQL NULL is not passed here (it is always JSON null). Values of
-// types outside the mapping table are appended as JSON strings of text
-// without error: use IsKnownType to detect them. A malformed value of a known
-// type returns dst unchanged and a *ValueError.
-//
-// The conversions assume the session settings DateStyle=ISO and
-// IntervalStyle=postgres (the defaults); see the package documentation.
+// AppendJSON appends a Postgres text value of the given type as JSON.
 func AppendJSON(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	info, ok := builtinTypes[typeOID]
 	if !ok {
@@ -32,8 +24,6 @@ func AppendJSON(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	return out, nil
 }
 
-// appendElement converts an array element, range bound or multirange member
-// whose type comes from the mapping table.
 func appendElement(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	info, ok := builtinTypes[typeOID]
 	if !ok {
@@ -42,8 +32,6 @@ func appendElement(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	return appendValue(dst, typeOID, info, text)
 }
 
-// elementError reports an invalid element, bound or member of a composite
-// value against the composite type and its whole text.
 func elementError(typeOID uint32, text []byte, err error) error {
 	var ve *ValueError
 	if errors.As(err, &ve) {
@@ -82,8 +70,6 @@ func appendValue(dst []byte, typeOID uint32, info typeInfo, text []byte) ([]byte
 	return dst, newValueError(typeOID, text, "unsupported type kind")
 }
 
-// appendInt copies an integer verbatim after checking it is a JSON integer,
-// so int8 values above 2^53 stay exact.
 func appendInt(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	if !isJSONInteger(text) {
 		return dst, newValueError(typeOID, text, "not an integer")
@@ -112,8 +98,6 @@ func appendBool(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	return dst, newValueError(typeOID, text, "not a boolean")
 }
 
-// appendRawJSON embeds a json or jsonb value, validated and without
-// insignificant whitespace. Object member order and duplicates are kept.
 func appendRawJSON(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	buf := bytes.NewBuffer(dst)
 	if err := json.Compact(buf, text); err != nil {
@@ -122,7 +106,6 @@ func appendRawJSON(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// isJSONInteger reports whether b matches -?(0|[1-9][0-9]*).
 func isJSONInteger(b []byte) bool {
 	if len(b) > 0 && b[0] == '-' {
 		b = b[1:]
@@ -133,8 +116,6 @@ func isJSONInteger(b []byte) bool {
 	return allDigits(b)
 }
 
-// isJSONNumber reports whether b is a JSON number:
-// -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?.
 func isJSONNumber(b []byte) bool {
 	end := len(b)
 	if i := bytes.IndexAny(b, "eE"); i >= 0 {
@@ -166,12 +147,8 @@ func allDigits(b []byte) bool {
 	return true
 }
 
-// byteaChunk is the decode buffer size for hex bytea; a multiple of 3 so the
-// base64 of consecutive chunks concatenates to the base64 of the whole value.
 const byteaChunk = 48
 
-// appendBytea converts bytea output (hex format "\x0a1b" or the legacy
-// escape format) to a standard padded base64 JSON string.
 func appendBytea(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	if len(text) >= 2 && text[0] == '\\' && text[1] == 'x' {
 		return appendHexBytea(dst, typeOID, text)
@@ -204,8 +181,6 @@ func appendHexBytea(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	return append(dst, '"'), nil
 }
 
-// unescapeBytea decodes bytea_output=escape text: "\\" is a backslash,
-// "\ooo" an octal byte, any other byte stands for itself.
 func unescapeBytea(text []byte) ([]byte, bool) {
 	out := make([]byte, 0, len(text))
 	for i := 0; i < len(text); {

@@ -28,17 +28,11 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/cdcsource"
 )
 
-// `wake cache-invalidator` end to end, in process: CDC events written to
-// Kafka (TLS + SCRAM) or NATS → the command → Redis (TLS with client
-// certificates for Kafka) → the keys disappear from the L1 of three cache
-// instances. The validate_dsn_env check runs against a real Postgres.
-
 const (
 	invalITWait = 2 * time.Minute
 	invalITPoll = 50 * time.Millisecond
 )
 
-// invalTestLog writes log records to the test log.
 func invalTestLog(t *testing.T) *slog.Logger {
 	t.Helper()
 	return slog.New(slog.NewTextHandler(invalTestWriter{t}, nil))
@@ -51,15 +45,12 @@ func (w invalTestWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// invalUserEvent returns a CDC event of public.users.
 func invalUserEvent(op string, id int, before, after string) []byte {
 	return fmt.Appendf(nil, `{"id":"0/16B3800-%d","source":{"db":"app","schema":"public","table":"users"},`+
 		`"op":%q,"ts_ms":1760600001000,"lsn":"0/16B3800","tx_id":7813,"key":{"id":%d},"before":%s,"after":%s,`+
 		`"schema_version":1}`, id, op, id, before, after)
 }
 
-// invalReaders starts three cache instances of namespace users, plus a probe
-// instance used to prove that every reader's bus subscription is live.
 func invalReaders(t *testing.T, client func() redis.UniversalClient) []cache.Cache[string] {
 	t.Helper()
 	open := func() cache.Cache[string] {
@@ -139,7 +130,6 @@ func TestCacheInvalidator_IntegrationKafkaTLSRedisTLS(t *testing.T) {
 		"WAKE_IT_KAFKA_USER": user.Name, "WAKE_IT_KAFKA_PASSWORD": user.Password, "WAKE_IT_DSN": db.DSN,
 	}
 
-	// Default replica identity: the e-mail template is rejected at startup.
 	path := invalWriteFile(t, "wake.yaml", yaml)
 	err = runCacheInvalidator(t.Context(), path, invalEnv{getenv: invalGetenv(vars), log: invalTestLog(t)})
 	var ee *exitError
@@ -157,7 +147,7 @@ func TestCacheInvalidator_IntegrationKafkaTLSRedisTLS(t *testing.T) {
 
 	invalProduce(t, cl,
 		invalUserEvent("u", 1, `{"id":1,"email":"a@example.com"}`, `{"id":1,"email":"b@example.com"}`),
-		nil, // a tombstone is skipped
+		nil,
 		invalUserEvent("d", 2, `{"id":2,"email":"c@example.com"}`, "null"))
 
 	require.Eventually(t, func() bool {
@@ -168,8 +158,6 @@ func TestCacheInvalidator_IntegrationKafkaTLSRedisTLS(t *testing.T) {
 		return status == http.StatusOK
 	}, invalITWait, invalITPoll, "ready")
 
-	// A before image without the e-mail (the identity was changed back):
-	// processing continues and /readyz reports the condition.
 	invalProduce(t, cl, invalUserEvent("u", 3, `{"id":3}`, `{"id":3,"email":"d@example.com"}`))
 	require.Eventually(t, func() bool {
 		status, failing := invalReadyz(t, addr)
@@ -194,7 +182,6 @@ func TestCacheInvalidator_IntegrationCatalogChecks(t *testing.T) {
 		CREATE TABLE app.full_t (id int PRIMARY KEY, v text);
 		ALTER TABLE app.full_t REPLICA IDENTITY FULL;`)
 	m, err := cdcsource.NewMapping(map[string][]string{
-		// Event names come through tables.name_map: public.accts is app.accounts.
 		"public.accts":  {"acct:{tenant}", "acct:{id}", "acct:upper:{upper_email}"},
 		"public.full_t": {"f:{v}"},
 		"public.gone":   {"g:{id}"},

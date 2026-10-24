@@ -9,9 +9,9 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Store is the fake. It is safe for concurrent use.
+// Store is an in-memory state store.
 type Store struct {
-	mu      sync.Mutex // protects every field below
+	mu      sync.Mutex
 	state   pipeline.State
 	has     bool
 	saves   int
@@ -22,12 +22,10 @@ type Store struct {
 // New returns a store without state.
 func New() *Store { return &Store{} }
 
-// NewWith returns a store holding a copy of s.
 func NewWith(s pipeline.State) *Store {
 	return &Store{state: s.Clone(), has: true}
 }
 
-// Load returns a copy of the stored state, or pipeline.ErrStateNotFound.
 func (st *Store) Load(_ context.Context) (pipeline.State, error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -40,7 +38,6 @@ func (st *Store) Load(_ context.Context) (pipeline.State, error) {
 	return st.state.Clone(), nil
 }
 
-// Save stores a copy of s.
 func (st *Store) Save(_ context.Context, s pipeline.State) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -52,28 +49,24 @@ func (st *Store) Save(_ context.Context, s pipeline.State) error {
 	return nil
 }
 
-// State returns a copy of the stored state and whether there is one.
 func (st *Store) State() (pipeline.State, bool) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.state.Clone(), st.has
 }
 
-// Saves returns the number of successful saves.
 func (st *Store) Saves() int {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.saves
 }
 
-// FailLoad makes Load return err; nil restores it.
 func (st *Store) FailLoad(err error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.loadErr = err
 }
 
-// FailSave makes Save return err; nil restores it.
 func (st *Store) FailSave(err error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()

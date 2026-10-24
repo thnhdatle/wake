@@ -27,17 +27,12 @@ func newHeartbeatEnv(t *testing.T, opts ...HeartbeatOption) (*Heartbeat, *fakeem
 	return hb, em, clk
 }
 
-// advance moves clk by d and waits until Run handled the fired timer and
-// waits on a new one; the timer it waited on is removed by the Advance, so a
-// registered waiter proves the iteration finished.
 func advance(t *testing.T, clk *clock.Fake, d time.Duration) {
 	t.Helper()
 	clk.Advance(d)
 	waitWaiter(t, clk)
 }
 
-// tsJSON is the expected heartbeat content, encoded independently of the
-// production code.
 func tsJSON(t *testing.T, at time.Time) []byte {
 	t.Helper()
 	b, err := json.Marshal(map[string]int64{"ts": at.UnixMilli()})
@@ -139,7 +134,7 @@ func TestHeartbeat_Touch_IgnoresEarlierTimes(t *testing.T) {
 		{name: "earlier is ignored", at: epoch, want: epoch.Add(time.Minute)},
 		{name: "equal is kept", at: epoch.Add(time.Minute), want: epoch.Add(time.Minute)},
 	}
-	for _, tc := range cases { // sequential: the cases share hb
+	for _, tc := range cases {
 		hb.Touch(tc.at)
 		assert.Equal(t, tc.want.UnixNano(), hb.last.Load(), tc.name)
 	}

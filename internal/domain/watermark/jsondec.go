@@ -11,13 +11,8 @@ import (
 	"unicode/utf8"
 )
 
-// errField is returned by field decoders for an unknown or null member; the
-// caller wraps it with its own sentinel.
 var errField = errors.New("bad member")
 
-// decodeObject decodes a single JSON object strictly: valid UTF-8, no
-// duplicate or unknown members (field returns errField for unknown names),
-// nothing after the closing brace. field decodes the value of one member.
 func decodeObject(b []byte, field func(name string, dec *json.Decoder) error) error {
 	if !utf8.Valid(b) {
 		return errors.New("invalid utf-8")
@@ -50,7 +45,6 @@ func decodeObject(b []byte, field func(name string, dec *json.Decoder) error) er
 	return nil
 }
 
-// decodeString decodes a non-null JSON string.
 func decodeString(dec *json.Decoder) (string, error) {
 	var s *string
 	if err := dec.Decode(&s); err != nil {
@@ -62,7 +56,6 @@ func decodeString(dec *json.Decoder) (string, error) {
 	return *s, nil
 }
 
-// decodeUint decodes a non-null JSON integer in uint64 range.
 func decodeUint(dec *json.Decoder) (uint64, error) {
 	var v *uint64
 	if err := dec.Decode(&v); err != nil {
@@ -74,8 +67,6 @@ func decodeUint(dec *json.Decoder) (uint64, error) {
 	return *v, nil
 }
 
-// decodeUints decodes a non-null JSON array of non-null uint64 integers.
-// An empty array decodes as nil.
 func decodeUints(dec *json.Decoder) ([]uint64, error) {
 	var raw *[]*uint64
 	if err := dec.Decode(&raw); err != nil {

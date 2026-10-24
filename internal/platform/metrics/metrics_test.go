@@ -28,8 +28,6 @@ var (
 	_ interface{ Label(string) string } = (*metrics.Capper)(nil)
 )
 
-// family returns the gathered metric family named name, failing the test if
-// it is absent.
 func family(t *testing.T, reg *prometheus.Registry, name string) *dto.MetricFamily {
 	t.Helper()
 	fams, err := reg.Gather()
@@ -63,7 +61,6 @@ func labelsOf(m *dto.Metric) map[string]string {
 	return out
 }
 
-// find returns the metric of fam whose labels equal want.
 func find(t *testing.T, fam *dto.MetricFamily, want map[string]string) *dto.Metric {
 	t.Helper()
 	for _, m := range fam.GetMetric() {
@@ -291,8 +288,6 @@ func TestSinkMetrics(t *testing.T) {
 	assert.Equal(t, uint64(1), h.GetSampleCount())
 }
 
-// sinkObserver is the observer method set the sink adapters share (the
-// webhook sink adds ObserveDeadLettered).
 type sinkObserver interface {
 	ObserveSent(sink string, events, bytes int)
 	ObserveAcked(sink string, events int)

@@ -217,7 +217,6 @@ func TestFile_Replay_OrderAndScratchCopy(t *testing.T) {
 			assert.Zero(t, b, "scratch is cleared after the callback")
 		}
 	}
-	// The stored records are untouched by the scratch clearing.
 	assert.Equal(t, seen, replayAll(t, f))
 }
 

@@ -27,27 +27,21 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-// waitTimeout bounds every wait on real time; the tests poll state, they
-// never sleep.
 const waitTimeout = 10 * time.Second
 
-// produced is one record handed to the fake client.
 type produced struct {
 	rec     *kgo.Record
 	promise func(*kgo.Record, error)
 }
 
-// fakeClient is an in-memory client. In auto mode it completes every record
-// synchronously with the outcome of result (nil: success); otherwise the
-// test completes records with complete.
 type fakeClient struct {
 	mu          sync.Mutex
 	topics      map[string]topicInfo
 	describeErr error
 	created     []string
 	createdArgs [][2]int
-	records     []produced // every Produce call, in call order
-	open        []produced // not yet completed, in call order
+	records     []produced
+	open        []produced
 	auto        bool
 	result      func(*kgo.Record) error
 	flushed     bool
@@ -130,7 +124,6 @@ func (f *fakeClient) createTopic(_ context.Context, topic string, partitions int
 	return nil
 }
 
-// complete finishes the n oldest open records with err.
 func (f *fakeClient) complete(n int, err error) {
 	f.mu.Lock()
 	n = min(n, len(f.open))
@@ -153,7 +146,6 @@ func (f *fakeClient) notifyLocked() {
 	f.changed = make(chan struct{})
 }
 
-// waitRecords blocks until at least n records were produced.
 func (f *fakeClient) waitRecords(t *testing.T, n int) []produced {
 	t.Helper()
 	deadline := time.After(waitTimeout)
@@ -172,7 +164,6 @@ func (f *fakeClient) waitRecords(t *testing.T, n int) []produced {
 	}
 }
 
-// acker counts acknowledgements per token.
 type acker struct {
 	mu   sync.Mutex
 	acks map[pipeline.AckToken]int
@@ -204,7 +195,6 @@ func (a *acker) total() int {
 	return n
 }
 
-// recorder is an Observer and AckObserver that counts calls.
 type recorder struct {
 	mu       sync.Mutex
 	sent     int
@@ -217,7 +207,6 @@ type recorder struct {
 
 func newRecorder() *recorder { return &recorder{retries: map[string]int{}} }
 
-// with runs fn under the recorder's lock.
 func (r *recorder) with(fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -252,10 +241,8 @@ func baseConfig() config.Sink {
 
 func getenv(string) string { return "" }
 
-// fastBackoff keeps retry loops short in tests.
 var fastBackoff = pipeline.Backoff{Initial: time.Millisecond, Max: 5 * time.Millisecond}
 
-// harness runs a sink with a fake client until the test ends.
 type harness struct {
 	sink   *Sink
 	client *fakeClient
@@ -292,7 +279,6 @@ func startSink(t *testing.T, cfg config.Sink, fc *fakeClient, opts ...Option) *h
 
 func withClientFactory(f clientFactory) Option { return func(o *options) { o.newClient = f } }
 
-// send hands a record to the sink with an ack handle for tx.
 func (h *harness) send(t *testing.T, rec pipeline.Record, tx uint64) {
 	t.Helper()
 	rec.Ack = pipeline.NewAckHandle(h.acks, pipeline.AckToken{Tx: tx})
@@ -314,7 +300,6 @@ func (h *harness) waitAcks(t *testing.T, n int) {
 		"acks %d, want %d", h.acks.total(), n)
 }
 
-// event builds a row event record of public.users.
 func event(op change.Op, k uint64, key string) pipeline.Record {
 	ev := &change.Event{
 		ID:            change.StreamID(lsn.LSN(0x16B3748), k),

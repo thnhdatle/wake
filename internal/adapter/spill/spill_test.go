@@ -177,7 +177,7 @@ func TestFile_LargeFrame(t *testing.T) {
 	t.Parallel()
 	st, _ := newStore(t)
 	f := create(t, st, "big")
-	big := bytes.Repeat([]byte{0xab, 0xcd, 0xef}, 3<<20) // 9 MiB, larger than the buffer
+	big := bytes.Repeat([]byte{0xab, 0xcd, 0xef}, 3<<20)
 	appendAll(t, f, []byte("before"), big, []byte("after"))
 	got := replayAll(t, f)
 	require.Len(t, got, 3)
@@ -285,7 +285,6 @@ func TestFile_Replay_Corrupt(t *testing.T) {
 			st, dir := newStore(t)
 			f := create(t, st, "a")
 			appendAll(t, f, []byte("first"), []byte("last"))
-			// Flush through a replay, then damage the file behind its back.
 			require.Len(t, replayAll(t, f), 2)
 			tc.damage(t, filepath.Join(dir, "a.spill"))
 
@@ -413,8 +412,6 @@ func TestFile_ConcurrentAppendWhileReplay(t *testing.T) {
 	assert.Len(t, replayAll(t, f), 201)
 }
 
-// TestParityWithFake runs the same script against the real store and
-// fakespill: both must agree on records, sizes and error classes.
 func TestParityWithFake(t *testing.T) {
 	t.Parallel()
 	disk, _ := newStore(t)

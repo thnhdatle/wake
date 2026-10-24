@@ -15,19 +15,16 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// Defaults of the snapshot configuration.
 const (
 	DefaultChunkRows      = 10_000
 	DefaultParallelTables = 4
 )
 
-// SlotCatalog is the part of pipeline.Catalog startup needs.
 type SlotCatalog interface {
 	Slot(ctx context.Context, name string) (pipeline.SlotStatus, error)
 	CurrentTime(ctx context.Context) (time.Time, error)
 }
 
-// PrepareDeps are the ports startup uses.
 type PrepareDeps struct {
 	Slots   pipeline.SlotManager
 	Catalog SlotCatalog
@@ -38,50 +35,31 @@ type PrepareDeps struct {
 	Logger  *slog.Logger
 }
 
-// PrepareConfig is startup's part of the configuration.
 type PrepareConfig struct {
-	// SlotName is wake_<source.name>.
-	SlotName string
-	// Mode is snapshot.mode.
-	Mode Mode
-	// Reinit is `wake run --reinit-state`.
-	Reinit bool
-	// ChunkRows and ParallelTables are snapshot.chunk_rows and
-	// snapshot.parallel_tables; zero means the default.
+	SlotName       string
+	Mode           Mode
+	Reinit         bool
 	ChunkRows      int
 	ParallelTables int
 }
 
-// Plan is the outcome of Prepare: where streaming starts and what the
-// pipeline must seed and run.
 type Plan struct {
 	Decision Decision
 	SystemID string
-	// State is the state as saved; NewStateKeeper takes it.
-	State pipeline.State
-	// StartLSN is the ack tracker's start and the reader's start: the slot's
-	// confirmed LSN, or the consistent point of a slot just created.
+	State    pipeline.State
 	StartLSN lsn.LSN
-	// Schemas seeds the stream's schema registry (stream.NewSchemas).
-	Schemas schema.RegistryState
-	// Initial is set when the initial snapshot runs (NewInitial); its
-	// sessions are open, so replication may start.
-	Initial *InitialSetup
+	Schemas  schema.RegistryState
+	Initial  *InitialSetup
 }
 
-// InitialSetup is an initial snapshot ready to copy: the run in the state,
-// the slot's consistent point and exported-snapshot sessions.
 type InitialSetup struct {
 	Run             pipeline.SnapshotRun
 	ConsistentPoint lsn.LSN
-	// TsMs is the clock_timestamp() read before slot creation.
-	TsMs     int64
-	Tables   []Table
-	Sessions []pipeline.ChunkSession
+	TsMs            int64
+	Tables          []Table
+	Sessions        []pipeline.ChunkSession
 }
 
-// Close ends the sessions; for error paths before the initial snapshot
-// runs.
 func (s *InitialSetup) Close(ctx context.Context) error {
 	errs := make([]error, 0, len(s.Sessions))
 	for _, sess := range s.Sessions {
@@ -91,14 +69,7 @@ func (s *InitialSetup) Close(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Prepare runs the startup procedure before replication
-// starts: it identifies the system, reads the slot and the state file,
-// decides with Decide and carries the decision out. Creating the slot reads
-// clock_timestamp(), saves the state without a consistent point (with the
-// initial run when snapshot.mode is initial), creates the slot with
-// EXPORT_SNAPSHOT, saves the consistent point and opens
-// snapshot.parallel_tables sessions on the exported snapshot, so that
-// START_REPLICATION may follow.
+// Prepare runs the startup procedure before replication starts.
 func Prepare(ctx context.Context, deps *PrepareDeps, cfg PrepareConfig) (*Plan, error) {
 	if err := validatePrepare(deps, &cfg); err != nil {
 		return nil, err
@@ -178,9 +149,6 @@ type preparer struct {
 	plan *Plan
 }
 
-// baseState returns the state to continue from: the loaded one, or a fresh
-// one that keeps the old schema versions and run counter; with Reinit the
-// schema versions are reseeded and unfinished runs are logged.
 func (p *preparer) baseState(ctx context.Context, f *Facts) (pipeline.State, error) {
 	d := p.plan.Decision
 	st := f.State.Clone()
@@ -207,8 +175,6 @@ func (p *preparer) baseState(ctx context.Context, f *Facts) (pipeline.State, err
 	return st, nil
 }
 
-// logDiscarded logs the unfinished runs and queued tables --reinit-state
-// discards (rerun `wake snapshot table`).
 func (p *preparer) logDiscarded(ctx context.Context, old *pipeline.State) {
 	for _, r := range old.Snapshot.Runs {
 		for _, t := range r.Tables {
@@ -228,8 +194,6 @@ func (p *preparer) logDiscarded(ctx context.Context, old *pipeline.State) {
 
 func (p *preparer) resume(ctx context.Context, st *pipeline.State, confirmed lsn.LSN) error {
 	if p.plan.Decision.FreshState {
-		// The slot's own consistent point is unknown; its confirmed LSN marks
-		// that streaming happened from it.
 		st.ConsistentPoint = confirmed
 		if err := p.deps.Store.Save(ctx, *st); err != nil {
 			return fmt.Errorf("snapshot: save state: %w", err)
@@ -259,8 +223,6 @@ func (p *preparer) create(ctx context.Context, st *pipeline.State) error {
 		}
 		st.Snapshot.Runs = []pipeline.SnapshotRun{run}
 	}
-	// Written before the slot exists: a crash before the next
-	// save leaves no consistent point, and the slot is recreated.
 	if err = p.deps.Store.Save(ctx, *st); err != nil {
 		return fmt.Errorf("snapshot: save state before slot creation: %w", err)
 	}

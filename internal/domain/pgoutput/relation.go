@@ -4,19 +4,12 @@ package pgoutput
 
 import "github.com/thnhdatle/wake/internal/domain/schema"
 
-// minColumnBytes is the smallest encoding of a Relation column: flags, an
-// empty name's NUL, type OID and type modifier.
 const minColumnBytes = 1 + 1 + 4 + 4
 
-// Relation describes a published table; Postgres sends it before the first
-// row message of the relation in a session and again after the relation's
-// definition changes. Column TypeName is resolved by Decoder.Decode; Parse
-// leaves it empty.
 type Relation struct {
 	schema.Relation
 }
 
-// MessageType implements Message.
 func (*Relation) MessageType() MessageType { return MessageRelation }
 
 func parseRelation(r *reader) *Relation {

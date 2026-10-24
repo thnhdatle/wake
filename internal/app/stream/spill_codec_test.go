@@ -51,8 +51,6 @@ func drawRecord(t *rapid.T) pipeline.Record {
 	return rec
 }
 
-// TestSpillCodec_RoundTrip_Property: decoding an encoded record yields the
-// record, and every strict prefix is rejected.
 func TestSpillCodec_RoundTrip_Property(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {

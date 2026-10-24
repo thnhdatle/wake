@@ -21,8 +21,6 @@ const (
 	tempGlob = ".state-*.tmp"
 )
 
-// fileOps are the filesystem steps of Save that a test replaces to simulate
-// a crash between them.
 type fileOps struct {
 	syncFile func(f *os.File) error
 	rename   func(oldPath, newPath string) error
@@ -37,17 +35,16 @@ func osOps() fileOps {
 	}
 }
 
-// Store is a pipeline.StateStore over one JSON file. It is safe for
-// concurrent use; saves are serialized.
+// Store keeps the pipeline state in one file.
 type Store struct {
 	path string
 	ops  fileOps
-	mu   sync.Mutex // serializes Save
+	mu   sync.Mutex
 }
 
 var _ pipeline.StateStore = (*Store)(nil)
 
-// New returns a store for the state file at path. It touches no file.
+// New returns a Store for the file at path.
 func New(path string) (*Store, error) {
 	if path == "" {
 		return nil, fmt.Errorf("%w: empty state path", ErrInvalidPath)
@@ -55,12 +52,9 @@ func New(path string) (*Store, error) {
 	return &Store{path: filepath.Clean(path), ops: osOps()}, nil
 }
 
-// Path returns the state file path.
 func (s *Store) Path() string { return s.path }
 
-// Load reads the state file. It returns pipeline.ErrStateNotFound when the
-// file does not exist, ErrCorrupt when it is not valid state JSON and
-// ErrUnsupportedVersion when its format_version is newer than this build's.
+// Load reads the saved state.
 func (s *Store) Load(ctx context.Context) (pipeline.State, error) {
 	if err := ctx.Err(); err != nil {
 		return pipeline.State{}, fmt.Errorf("load state: %w", err)
@@ -86,15 +80,11 @@ func (s *Store) Load(ctx context.Context) (pipeline.State, error) {
 	return st, nil
 }
 
-// Save replaces the state file atomically with st and creates the parent
-// directory if needed. On failure the previous file is intact and the
-// temporary file is removed.
+// Save writes the state to the file.
 func (s *Store) Save(ctx context.Context, st pipeline.State) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("save state: %w", err)
 	}
-	// Compact on purpose: Marshal keeps TableProgress.Position byte for byte,
-	// while indenting would reformat the raw JSON value.
 	data, err := json.Marshal(st)
 	if err != nil {
 		return fmt.Errorf("encode state: %w", err)
@@ -121,8 +111,6 @@ func (s *Store) Save(ctx context.Context, st pipeline.State) error {
 	return nil
 }
 
-// writeTemp writes data to a new synced temporary file in dir and returns
-// its path; on failure it removes the file.
 func (s *Store) writeTemp(dir string, data []byte) (_ string, err error) {
 	f, err := os.CreateTemp(dir, tempGlob)
 	if err != nil {

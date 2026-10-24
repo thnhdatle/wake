@@ -20,7 +20,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakestate"
 )
 
-// requestSnapshot is what `wake snapshot table` does.
 func requestSnapshot(t *testing.T, db *fakeDB, table string) {
 	t.Helper()
 	content, err := watermark.Trigger{Table: table}.MarshalJSON()
@@ -29,7 +28,6 @@ func requestSnapshot(t *testing.T, db *fakeDB, table string) {
 	require.NoError(t, err)
 }
 
-// readEvents returns the `r` events of the records.
 func readEvents(recs []pipeline.Record) []pipeline.Record {
 	var out []pipeline.Record
 	for _, r := range recs {
@@ -40,10 +38,6 @@ func readEvents(recs []pipeline.Record) []pipeline.Record {
 	return out
 }
 
-// TestPipeline_WatermarkSnapshot_ConcurrentWrites snapshots a table through
-// watermarks while a writer changes it, including inside every chunk's
-// LOW–HIGH window (updates, key-changing updates and deletes of rows the
-// chunk just read): the final sink state must equal the database.
 func TestPipeline_WatermarkSnapshot_ConcurrentWrites(t *testing.T) {
 	t.Parallel()
 	for seed := range uint64(4) {
@@ -52,7 +46,6 @@ func TestPipeline_WatermarkSnapshot_ConcurrentWrites(t *testing.T) {
 			db := newFakeDB(items)
 			db.load(items.qualified(), 400)
 			w := newWriter(db, items.qualified(), seed)
-			// Inside the window: change rows of the chunk just read.
 			db.onRead = func(n int) { w.touch(int64(n*25-20), int64(n*25)) }
 			p := startProc(t, db, fakestate.New(), procOpts{mode: snapshot.ModeNever, chunkRows: 25, nonce: nonce(1)})
 			requestSnapshot(t, db, items.qualified())
@@ -80,9 +73,6 @@ func TestPipeline_WatermarkSnapshot_ConcurrentWrites(t *testing.T) {
 	}
 }
 
-// TestPipeline_WatermarkSnapshot_RowsCarryHighWatermark checks the CDC event fields
-// of watermark `r` events: lsn and ts_ms of the HIGH transaction, no tx_id,
-// n = c × chunk_rows + i.
 func TestPipeline_WatermarkSnapshot_RowsCarryHighWatermark(t *testing.T) {
 	t.Parallel()
 	db := newFakeDB(items)
@@ -101,16 +91,11 @@ func TestPipeline_WatermarkSnapshot_RowsCarryHighWatermark(t *testing.T) {
 		assert.JSONEq(t, `"`+r.ID.LSN.String()+`"`, string(payload["lsn"]))
 		assert.JSONEq(t, "null", string(payload["before"]))
 	}
-	// Chunks 0, 1 and 2 of three rows each: n = c*3 + i.
 	assert.Equal(t, []uint64{0, 1, 2, 3, 4, 5, 6}, ns)
 	assert.NotEqual(t, reads[0].ID.LSN, reads[3].ID.LSN, "each chunk has its own HIGH")
 	assert.Equal(t, db.state(items.qualified()), finalState(t, p.sink.Received(), items.qualified()))
 }
 
-// TestPipeline_WatermarkSnapshot_RetriesInvisibleCommit: a transaction whose
-// commit record the stream read before the run started is still invisible
-// to the first chunk read, and pg_xact_status reports it committed, so the
-// chunk is discarded and re-run.
 func TestPipeline_WatermarkSnapshot_RetriesInvisibleCommit(t *testing.T) {
 	t.Parallel()
 	db := newFakeDB(items)
@@ -132,9 +117,6 @@ func TestPipeline_WatermarkSnapshot_RetriesInvisibleCommit(t *testing.T) {
 	assert.Equal(t, "late", state[5])
 }
 
-// TestPipeline_SnapshotRequests: requests for uncaptured tables and invalid
-// requests are counted as "_other" and ignored; a request replayed after a
-// restart is not queued again.
 func TestPipeline_SnapshotRequests(t *testing.T) {
 	t.Parallel()
 	db := newFakeDB(items)
@@ -151,8 +133,6 @@ func TestPipeline_SnapshotRequests(t *testing.T) {
 	assert.Len(t, readEvents(p.sink.Received()), 3)
 	p.stop(t)
 
-	// A restart from an older confirmed LSN replays the requests: the state
-	// remembers the latest one, so nothing runs again.
 	st, ok := store.State()
 	require.True(t, ok)
 	require.NotZero(t, st.Snapshot.TriggerLSN)
@@ -165,9 +145,6 @@ func TestPipeline_SnapshotRequests(t *testing.T) {
 	assert.Equal(t, uint64(1), p2.keeper.State().RunCounter)
 }
 
-// TestPipeline_InitialSnapshot copies two tables at the exported snapshot
-// with two workers while writers run; the stream is released after every
-// `r` event, which carries the consistent point and the clock_timestamp.
 func TestPipeline_InitialSnapshot(t *testing.T) {
 	t.Parallel()
 	db := newFakeDB(items, orders)
@@ -213,10 +190,6 @@ func TestPipeline_InitialSnapshot(t *testing.T) {
 	assert.Equal(t, uint64(120), rows[items.qualified()])
 }
 
-// TestPipeline_InitialSnapshot_CrashResumes kills the process during the
-// initial snapshot after some chunks were acknowledged; the restart keeps
-// the slot, releases the stream at once and resumes each unfinished table
-// from its last acknowledged key through watermarks under the same run_id.
 func TestPipeline_InitialSnapshot_CrashResumes(t *testing.T) {
 	t.Parallel()
 	db := newFakeDB(items, orders)
@@ -227,8 +200,6 @@ func TestPipeline_InitialSnapshot_CrashResumes(t *testing.T) {
 		mode: snapshot.ModeInitial, chunkRows: 10, parallel: 1, nonce: nonce(1), manualAck: true,
 	})
 	ctx := context.Background()
-	// Process 1 emits the whole snapshot but only the first 25 records are
-	// acknowledged: chunks 0 and 1 of the first table are complete.
 	require.NoError(t, p1.sink.WaitReceived(ctx, 140))
 	wi := newWriter(db, items.qualified(), 3)
 	for range 50 {
@@ -249,7 +220,6 @@ func TestPipeline_InitialSnapshot_CrashResumes(t *testing.T) {
 	assert.Equal(t, uint64(20), run.Tables[0].Rows)
 	assert.Equal(t, st.ConsistentPoint, dbConfirmed(db), "nothing beyond the consistent point confirmed")
 
-	// Process 2: resume.
 	p2 := startProc(t, db, store, procOpts{mode: snapshot.ModeInitial, chunkRows: 10, parallel: 1, nonce: nonce(2)})
 	assert.Equal(t, snapshot.ActionResume, p2.plan.Decision.Action)
 	assert.Nil(t, p2.plan.Initial)
@@ -267,7 +237,6 @@ func TestPipeline_InitialSnapshot_CrashResumes(t *testing.T) {
 	for _, table := range []string{items.qualified(), orders.qualified()} {
 		assert.Equal(t, db.state(table), finalState(t, all, table), table)
 	}
-	// Rows of the acknowledged chunks are not copied again.
 	for _, r := range reads {
 		if r.Destination == items.qualified() {
 			var payload struct {

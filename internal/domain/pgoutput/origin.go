@@ -4,13 +4,11 @@ package pgoutput
 
 import "github.com/thnhdatle/wake/internal/domain/lsn"
 
-// Origin names the replication origin of the current transaction.
 type Origin struct {
 	CommitLSN lsn.LSN
 	Name      string
 }
 
-// MessageType implements Message.
 func (*Origin) MessageType() MessageType { return MessageOrigin }
 
 func parseOrigin(r *reader) *Origin {

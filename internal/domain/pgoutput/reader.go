@@ -8,9 +8,6 @@ import (
 	"fmt"
 )
 
-// reader decodes big-endian protocol fields from one message. The first
-// failure is kept in err; later reads return zero values, so parsers check
-// err once at the end.
 type reader struct {
 	buf []byte
 	off int
@@ -67,7 +64,6 @@ func (r *reader) u64(what string) uint64 {
 	return 0
 }
 
-// cstring reads a NUL-terminated string.
 func (r *reader) cstring(what string) string {
 	if r.err != nil {
 		return ""
@@ -82,7 +78,6 @@ func (r *reader) cstring(what string) string {
 	return s
 }
 
-// finish reports trailing bytes as malformed and returns the first error.
 func (r *reader) finish() error {
 	if r.err == nil && r.remaining() > 0 {
 		r.fail("%d trailing bytes", r.remaining())

@@ -17,9 +17,6 @@ const (
 	stSystem = "7000000000000000001"
 )
 
-// stFacts returns facts of a healthy resume: the slot exists and is idle, the
-// state file is ours and has a consistent point, mode initial. Options adjust
-// them.
 func stFacts(opts ...func(*Facts)) Facts {
 	st := pipeline.NewState(stSlot, stSystem)
 	st.ConsistentPoint = lsn.LSN(0x100)
@@ -54,7 +51,6 @@ func TestDecide_Table(t *testing.T) {
 		wantFresh   bool
 		wantInitial bool
 	}{
-		// slot lost / active: errors regardless of the rest.
 		{name: "lost slot with state", facts: stFacts(stLost), wantErr: ErrSlotInvalidated},
 		{name: "lost slot without state", facts: stFacts(stLost, stNoState), wantErr: ErrSlotInvalidated},
 		{name: "lost slot with reinit", facts: stFacts(stLost, stReinit), wantErr: ErrSlotInvalidated},
@@ -65,7 +61,6 @@ func TestDecide_Table(t *testing.T) {
 		{name: "active slot other slot state", facts: stFacts(stActive, stOtherSlot), wantErr: ErrSlotInUse},
 		{name: "lost wins over active", facts: stFacts(stLost, stActive), wantErr: ErrSlotInvalidated},
 
-		// absent slot, absent state: first start.
 		{
 			name: "first start initial", facts: stFacts(stNoSlot, stNoState),
 			wantAction: ActionCreateSlot, wantFresh: true, wantInitial: true,
@@ -83,7 +78,6 @@ func TestDecide_Table(t *testing.T) {
 			wantAction: ActionCreateSlot, wantFresh: true, wantReinit: true,
 		},
 
-		// present slot, absent state.
 		{name: "slot without state", facts: stFacts(stNoState), wantErr: pipeline.ErrStateMismatch},
 		{
 			name: "slot without state reinit", facts: stFacts(stNoState, stReinit),
@@ -94,7 +88,6 @@ func TestDecide_Table(t *testing.T) {
 			wantAction: ActionResume, wantReinit: true, wantFresh: true,
 		},
 
-		// present slot, state of another slot or system.
 		{name: "state of another slot", facts: stFacts(stOtherSlot), wantErr: pipeline.ErrStateMismatch},
 		{name: "state of another system", facts: stFacts(stOtherSystem), wantErr: pipeline.ErrStateMismatch},
 		{
@@ -110,7 +103,6 @@ func TestDecide_Table(t *testing.T) {
 			wantAction: ActionResume, wantReinit: true, wantFresh: true,
 		},
 
-		// present slot, our state without a consistent point.
 		{
 			name: "recreate initial", facts: stFacts(stNoPoint),
 			wantAction: ActionRecreateSlot, wantFresh: true, wantInitial: true,
@@ -128,7 +120,6 @@ func TestDecide_Table(t *testing.T) {
 			wantAction: ActionRecreateSlot, wantFresh: true, wantReinit: true,
 		},
 
-		// present slot, our state with a consistent point.
 		{name: "resume", facts: stFacts(), wantAction: ActionResume},
 		{name: "resume never", facts: stFacts(stModeNever), wantAction: ActionResume},
 		{
@@ -136,7 +127,6 @@ func TestDecide_Table(t *testing.T) {
 			wantAction: ActionResume, wantReinit: true, wantFresh: true,
 		},
 
-		// absent slot, our state without a consistent point.
 		{
 			name: "slot absent state without point", facts: stFacts(stNoSlot, stNoPoint),
 			wantAction: ActionCreateSlot, wantFresh: true, wantInitial: true,
@@ -150,7 +140,6 @@ func TestDecide_Table(t *testing.T) {
 			wantAction: ActionCreateSlot, wantFresh: true, wantInitial: true, wantReinit: true,
 		},
 
-		// absent slot, state with a consistent point or of another source.
 		{name: "slot missing", facts: stFacts(stNoSlot), wantErr: ErrSlotMissing},
 		{name: "slot missing other slot", facts: stFacts(stNoSlot, stOtherSlot), wantErr: ErrSlotMissing},
 		{name: "slot missing other system", facts: stFacts(stNoSlot, stOtherSystem), wantErr: ErrSlotMissing},

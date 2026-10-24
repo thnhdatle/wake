@@ -89,9 +89,8 @@ func TestValidate_Rejects(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(c *conf)
-		want   string // substring that must appear, always starting with the key path
+		want   string
 	}{
-		// source
 		{"source name empty", func(c *conf) { c.Source.Name = "" }, "source.name: required"},
 		{"source name upper case", func(c *conf) { c.Source.Name = "App" }, "source.name: \"App\" must match"},
 		{"source name with dash", func(c *conf) { c.Source.Name = "my-app" }, "source.name"},
@@ -107,7 +106,6 @@ func TestValidate_Rejects(t *testing.T) {
 			c.Source.Publication = config.Publication{Mode: config.PublicationExisting}
 		}, "source.publication.name: required"},
 
-		// tables
 		{"managed without include", func(c *conf) { c.Tables.Include = nil }, "tables.include: at least one glob"},
 		{"include glob malformed", func(c *conf) { c.Tables.Include = []string{"public.[x"} }, "tables.include[0]"},
 		{"exclude glob empty", func(c *conf) { c.Tables.Exclude = []string{""} }, "tables.exclude[0]"},
@@ -131,7 +129,6 @@ func TestValidate_Rejects(t *testing.T) {
 			c.Tables.NameMap = map[string]string{"public.a b": "public." + longTable}
 		}, `tables.name_map["public.a b"]: target "public.` + longTable[:10]},
 
-		// snapshot, stream, state
 		{"snapshot mode unknown", func(c *conf) { c.Snapshot.Mode = "always" }, "snapshot.mode"},
 		{"chunk_rows zero", func(c *conf) { c.Snapshot.ChunkRows = 0 }, "snapshot.chunk_rows"},
 		{"chunk_rows negative", func(c *conf) { c.Snapshot.ChunkRows = -5 }, "snapshot.chunk_rows"},
@@ -142,7 +139,6 @@ func TestValidate_Rejects(t *testing.T) {
 		{"min_confirm_bytes negative", func(c *conf) { c.Stream.MinConfirmBytes = -1 }, "stream.min_confirm_bytes"},
 		{"state path empty", func(c *conf) { c.State.Path = "" }, "state.path"},
 
-		// lag, heartbeat, admin
 		{"lag interval zero", func(c *conf) { c.Lag.Interval = 0 }, "lag.interval"},
 		{"warn equals critical", func(c *conf) { c.Lag.WarnBytes = c.Lag.CriticalBytes }, "lag.warn_bytes"},
 		{"warn above critical", func(c *conf) { c.Lag.WarnBytes = c.Lag.CriticalBytes + 1 }, "lag.warn_bytes"},
@@ -156,7 +152,6 @@ func TestValidate_Rejects(t *testing.T) {
 		{"admin listen bad port", func(c *conf) { c.Admin.Listen = "127.0.0.1:99999" }, "admin.listen"},
 		{"admin listen port not numeric", func(c *conf) { c.Admin.Listen = "127.0.0.1:http" }, "admin.listen"},
 
-		// sinks, common
 		{"no sinks", func(c *conf) { c.Sinks = nil }, "sinks: at least one sink"},
 		{"sink name empty", func(c *conf) { c.Sinks[sinkNATS].Name = "" }, "sinks[1].name: must not be empty"},
 		{
@@ -178,7 +173,6 @@ func TestValidate_Rejects(t *testing.T) {
 			c.Sinks[sinkStdout].Kafka = kafkaSink(c)
 		}, "sinks[3].kafka: not allowed for a sink of type stdout"},
 
-		// kafka
 		{"kafka section missing", func(c *conf) { c.Sinks[sinkKafka].Kafka = nil }, "sinks[0].kafka: section required"},
 		{"kafka brokers empty", func(c *conf) { kafkaSink(c).Brokers = nil }, "sinks[0].kafka.brokers"},
 		{
@@ -225,7 +219,6 @@ func TestValidate_Rejects(t *testing.T) {
 			kafkaSink(c).TLS = config.TLS{KeyFile: "k.pem"}
 		}, "sinks[0].kafka.tls.cert_file"},
 
-		// nats
 		{"nats section missing", func(c *conf) { c.Sinks[sinkNATS].NATS = nil }, "sinks[1].nats: section required"},
 		{"nats url empty", func(c *conf) { natsSink(c).URL = "" }, "sinks[1].nats.url: required"},
 		{"nats url scheme", func(c *conf) { natsSink(c).URL = "http://h:4222" }, "sinks[1].nats.url"},
@@ -240,7 +233,6 @@ func TestValidate_Rejects(t *testing.T) {
 		},
 		{"nats tls half", func(c *conf) { natsSink(c).TLS.KeyFile = "k.pem" }, "sinks[1].nats.tls.cert_file"},
 
-		// webhook
 		{
 			"webhook section missing",
 			func(c *conf) { c.Sinks[sinkWebhook].Webhook = nil },
@@ -265,7 +257,6 @@ func TestValidate_Rejects(t *testing.T) {
 		{"webhook lanes zero", func(c *conf) { hookSink(c).Lanes = 0 }, "sinks[2].webhook.lanes"},
 		{"webhook max_attempts zero", func(c *conf) { hookSink(c).MaxAttempts = 0 }, "sinks[2].webhook.max_attempts"},
 
-		// cache invalidator
 		{"invalidator admin_listen", func(c *conf) { inval(c).AdminListen = "nope" }, "cache_invalidator.admin_listen"},
 		{"invalidator source", func(c *conf) { inval(c).Source = "sqs" }, "cache_invalidator.source"},
 		{"invalidator namespace", func(c *conf) { inval(c).Namespace = "a b" }, "cache_invalidator.namespace"},

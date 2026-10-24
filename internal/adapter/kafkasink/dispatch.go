@@ -12,11 +12,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// Run implements pipeline.Sink: it creates the franz-go client, hands
-// accepted events to it in Send order and acknowledges them when Kafka has
-// them. It returns nil when ctx ends, after flushing for at most the
-// shutdown timeout; it returns an error only when the client cannot be
-// built.
+// Run produces queued events in order until ctx is canceled.
 func (s *Sink) Run(ctx context.Context) error {
 	if !s.running.CompareAndSwap(false, true) {
 		return ErrAlreadyRunning
@@ -35,10 +31,6 @@ func (s *Sink) Run(ctx context.Context) error {
 	return nil
 }
 
-// dispatch is the single producer loop. It re-produces failed writes before
-// anything newer, checks each event (size, topic) before producing it, and
-// produces events in the order Send accepted them, so records of one key
-// reach their partition in order.
 func (s *Sink) dispatch(ctx context.Context, cl client) {
 	var (
 		next     *unit
@@ -53,8 +45,6 @@ func (s *Sink) dispatch(ctx context.Context, cl client) {
 			continue
 		}
 		if next == nil {
-			// A failure may arrive while take waits: the loop looks at
-			// failures again before producing anything newer.
 			if next = s.take(ctx); next != nil {
 				seq++
 				next.seq = seq
@@ -70,21 +60,18 @@ func (s *Sink) dispatch(ctx context.Context, cl client) {
 		s.unblock()
 		attempts.block = 0
 		if s.hasFailures() {
-			continue // re-produce those first
+			continue
 		}
 		s.produce(ctx, cl, next.writes, false)
 		next = nil
 	}
 }
 
-// retryState counts consecutive failed attempts for the backoff.
 type retryState struct {
-	block   int // prepare failures of the head event
-	recover int // failed re-production rounds
+	block   int
+	recover int
 }
 
-// take returns the next accepted event, or nil when ctx ended or a write
-// failed meanwhile.
 func (s *Sink) take(ctx context.Context) *unit {
 	select {
 	case <-ctx.Done():
@@ -102,8 +89,6 @@ func (s *Sink) hasFailures() bool {
 	return len(s.failed) > 0
 }
 
-// prepare checks u against max_event_bytes and its topic (existence,
-// auto-creation, max.message.bytes) and builds its records.
 func (s *Sink) prepare(ctx context.Context, cl client, u *unit) error {
 	if u.size > s.maxEventBytes {
 		return fmt.Errorf("%w: %s", ErrEventTooLarge, tooLargeReason(&u.rec, u.size, s.maxEventBytes))
@@ -123,9 +108,6 @@ func (s *Sink) prepare(ctx context.Context, cl client, u *unit) error {
 	return nil
 }
 
-// topic returns the cached facts about a topic, reading them on first use
-// or when fresh is set (a `t` event needs the current partition count). A
-// missing topic is created when kafka.auto_create_topics is on.
 func (s *Sink) topic(ctx context.Context, cl client, topic string, fresh bool) (topicInfo, error) {
 	s.mu.Lock()
 	info, ok := s.topics[topic]
@@ -145,8 +127,6 @@ func (s *Sink) topic(ctx context.Context, cl client, topic string, fresh bool) (
 		}
 	}
 	if info.partitions < 1 {
-		// A topic seen while its creation propagates: a `t` fan-out
-		// would miss partitions, so wait for the full metadata.
 		return topicInfo{}, fmt.Errorf("%w: topic %s has no partitions in metadata yet", errTopicNotReady, topic)
 	}
 	s.mu.Lock()
@@ -155,8 +135,6 @@ func (s *Sink) topic(ctx context.Context, cl client, topic string, fresh bool) (
 	return info, nil
 }
 
-// createTopic creates a missing topic when kafka.auto_create_topics is on
-// and reads it back.
 func (s *Sink) createTopic(ctx context.Context, cl client, topic string) (topicInfo, error) {
 	if !s.autoCreate {
 		return topicInfo{}, fmt.Errorf("%w: topic %s does not exist and kafka.auto_create_topics is false",
@@ -182,8 +160,6 @@ func (s *Sink) forgetTopic(topic string) {
 	s.mu.Unlock()
 }
 
-// blocked records a prepare failure and waits the backoff. It reports
-// whether ctx is still live.
 func (s *Sink) blocked(ctx context.Context, err error, attempt *int) bool {
 	s.noteBlocked(err)
 	d := s.delay(*attempt)
@@ -191,7 +167,6 @@ func (s *Sink) blocked(ctx context.Context, err error, attempt *int) bool {
 	return s.sleep(ctx, d)
 }
 
-// noteBlocked records a prepare failure in Health and the metrics.
 func (s *Sink) noteBlocked(err error) {
 	v := classify(err, s.autoCreate)
 	s.mu.Lock()
@@ -208,8 +183,6 @@ func (s *Sink) unblock() {
 	s.logTransition(tr)
 }
 
-// produce hands writes to franz-go. Never called with s.mu held: a promise
-// may run before Produce returns.
 func (s *Sink) produce(ctx context.Context, cl client, ws []*write, retry bool) {
 	if len(ws) == 0 {
 		return
@@ -235,14 +208,12 @@ func (s *Sink) produce(ctx context.Context, cl client, ws []*write, retry bool) 
 	for _, u := range sent {
 		s.obs.ObserveSent(s.name, 1, int(u.size))
 	}
-	// The records outlive Run's context on purpose: shutdown flushes them.
 	pctx := context.WithoutCancel(ctx)
 	for _, w := range ws {
 		cl.Produce(pctx, w.rec, func(_ *kgo.Record, err error) { s.onResult(w, err) })
 	}
 }
 
-// onResult is franz-go's promise for one write.
 func (s *Sink) onResult(w *write, err error) {
 	now := s.clock.Now()
 	s.mu.Lock()
@@ -287,9 +258,6 @@ func (s *Sink) onResult(w *write, err error) {
 	}
 }
 
-// failLocked queues a failed write for re-production and records the error
-// in Health; keep is false while shutting down (the write is dropped,
-// unacknowledged).
 func (s *Sink) failLocked(w *write, err error, now time.Time) (transition, verdict, bool) {
 	if s.closing {
 		return transition{}, verdict{}, false
@@ -303,8 +271,6 @@ func (s *Sink) failLocked(w *write, err error, now time.Time) (transition, verdi
 	return s.health.set(faultWrite, &fault{v: v, reason: reason}, now), v, true
 }
 
-// complete acknowledges an event whose writes Kafka all holds and releases
-// its buffer space.
 func (s *Sink) complete(u *unit, latency time.Duration, accepted int) {
 	s.obs.ObserveAcked(s.name, 1)
 	s.obs.ObserveLatency(s.name, latency)
@@ -317,10 +283,6 @@ func (s *Sink) complete(u *unit, latency time.Duration, accepted int) {
 	<-s.slots
 }
 
-// recoverFailed re-produces failed writes once every write in flight has
-// completed, in dispatch order and after the backoff, then waits for them
-// before anything newer is produced: per partition franz-go fails a whole
-// suffix of buffered records, so re-producing in order restores the order.
 func (s *Sink) recoverFailed(ctx context.Context, cl client, attempts *retryState) bool {
 	if !s.waitIdle(ctx) {
 		return false
@@ -368,7 +330,6 @@ func (s *Sink) requeue(ws []*write) {
 	s.mu.Unlock()
 }
 
-// waitIdle waits until no write is in flight.
 func (s *Sink) waitIdle(ctx context.Context) bool {
 	for {
 		s.mu.Lock()
@@ -385,9 +346,6 @@ func (s *Sink) waitIdle(ctx context.Context) bool {
 	}
 }
 
-// watch reports a stall: records in flight and no acknowledgement for the
-// stall timeout, as when every broker is down and franz-go retries
-// internally.
 func (s *Sink) watch(ctx context.Context) {
 	t := s.clock.NewTicker(max(s.stallTimeout/4, time.Millisecond))
 	defer t.Stop()
@@ -420,8 +378,6 @@ func (s *Sink) checkStall() {
 	s.logTransition(tr)
 }
 
-// shutdown flushes what franz-go holds for at most the shutdown timeout,
-// then closes the client; writes still pending stay unacknowledged.
 func (s *Sink) shutdown(ctx context.Context, cl client) {
 	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), DefaultShutdownTimeout)
 	defer cancel()

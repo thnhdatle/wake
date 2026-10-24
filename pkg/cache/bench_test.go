@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// value64 is the 64-byte value of the L1 hit acceptance benchmark.
 type value64 struct {
 	A, B, C, D, E, F, G, H int64
 }
@@ -24,10 +23,6 @@ func newBenchCache(tb testing.TB) Cache[value64] {
 	return c
 }
 
-// BenchmarkCache_GetL1Hit is the L1 hit acceptance benchmark at unit
-// level: Get on an L1 hit,
-// single goroutine, metrics enabled with pre-bound counters, V = 64-byte
-// struct, string key. Target: < 200 ns/op, 0 allocs/op.
 func BenchmarkCache_GetL1Hit(b *testing.B) {
 	c := newBenchCache(b)
 	ctx := context.Background()

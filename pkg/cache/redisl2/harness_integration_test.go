@@ -23,18 +23,13 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/redisl2"
 )
 
-// busHealthCheck is short so dead links are detected quickly in tests.
 const busHealthCheck = 200 * time.Millisecond
 
-// redisHarness is one Redis deployment (single node, Cluster or TLS) shared
-// by the parallel subtests of a conformance run; namespaces keep them apart.
 type redisHarness struct {
-	admin redis.UniversalClient
-	// newClient returns a client whose connections carry name
-	// (CLIENT SETNAME), so DropBus can find the backend's subscription.
+	admin     redis.UniversalClient
 	newClient func(name string) redis.UniversalClient
 
-	mu    sync.Mutex // protects names
+	mu    sync.Mutex
 	names map[l2.Backend]string
 }
 
@@ -46,7 +41,7 @@ func newRedisHarness(admin redis.UniversalClient, newClient func(name string) re
 
 func randomName() string {
 	var b [6]byte
-	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails (Go >= 1.24)
+	_, _ = rand.Read(b[:])
 	return "wake-test-" + hex.EncodeToString(b[:])
 }
 
@@ -74,8 +69,6 @@ func (h *redisHarness) Now(t *testing.T) time.Time {
 	return now
 }
 
-// Elapse polls the server clock until d has passed (plus a millisecond for
-// PX rounding).
 func (h *redisHarness) Elapse(t *testing.T, d time.Duration) {
 	t.Helper()
 	until := h.Now(t).Add(d + time.Millisecond)
@@ -152,8 +145,6 @@ func (h *redisHarness) Delete(t *testing.T, key string) {
 	require.NoError(t, h.admin.Del(t.Context(), key).Err())
 }
 
-// DropBus kills the subscription connection of b (CLIENT KILL ID), found by
-// its client name and pub/sub flag on whichever node serves it.
 func (h *redisHarness) DropBus(t *testing.T, b l2.Backend) {
 	t.Helper()
 	h.mu.Lock()
@@ -207,7 +198,6 @@ func hasField(fields []string, want string) bool {
 	return false
 }
 
-// forEachNode runs fn on every master (Cluster) or on the only node.
 func forEachNode(ctx context.Context, rdb redis.UniversalClient, fn func(context.Context, *redis.Client) error) error {
 	switch c := rdb.(type) {
 	case *redis.ClusterClient:
@@ -218,7 +208,6 @@ func forEachNode(ctx context.Context, rdb redis.UniversalClient, fn func(context
 	return errors.New("unsupported client type")
 }
 
-// eventually polls cond every 10 ms until it holds or timeout passes.
 func eventually(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

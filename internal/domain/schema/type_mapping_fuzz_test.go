@@ -16,9 +16,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// FuzzAppendJSON checks that the type mapping never panics, returns dst
-// unchanged on error and otherwise produces valid JSON. Seeds live in
-// testdata/fuzz/FuzzAppendJSON.
 func FuzzAppendJSON(f *testing.F) {
 	f.Add(schema.OIDInt8, []byte("9223372036854775807"))
 	f.Add(schema.OIDTextArray, []byte(`{"a,b","c\"d",NULL}`))
@@ -38,8 +35,6 @@ func FuzzAppendJSON(f *testing.F) {
 	})
 }
 
-// TestFuzzAppendJSON_SeedCorpus guards the committed seed corpus: every type
-// family has a seed and each file is in the go test corpus format.
 func TestFuzzAppendJSON_SeedCorpus(t *testing.T) {
 	t.Parallel()
 	entries, err := os.ReadDir(filepath.Join("testdata", "fuzz", "FuzzAppendJSON"))

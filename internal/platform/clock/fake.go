@@ -7,18 +7,17 @@ import (
 	"time"
 )
 
-// Fake is a manually advanced clock. Timers and tickers fire only from
-// Advance or Set. It is safe for concurrent use.
+// Fake is a manually advanced clock.
 type Fake struct {
-	mu      sync.Mutex // protects now, waiters and changed
+	mu      sync.Mutex
 	now     time.Time
 	waiters []*fakeWaiter
-	changed chan struct{} // closed and replaced whenever waiters change
+	changed chan struct{}
 }
 
 type fakeWaiter struct {
 	at     time.Time
-	period time.Duration // 0 for one-shot timers
+	period time.Duration
 	ch     chan time.Time
 }
 
@@ -27,15 +26,12 @@ func NewFake(start time.Time) *Fake {
 	return &Fake{now: start, changed: make(chan struct{})}
 }
 
-// Now returns the fake time.
 func (f *Fake) Now() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.now
 }
 
-// After returns a channel that receives the fake time once it reaches
-// Now()+d. A non-positive d fires immediately.
 func (f *Fake) After(d time.Duration) <-chan time.Time {
 	ch := make(chan time.Time, 1)
 	f.mu.Lock()
@@ -48,8 +44,6 @@ func (f *Fake) After(d time.Duration) <-chan time.Time {
 	return ch
 }
 
-// NewTicker returns a ticker firing every d of fake time. Like time.Ticker,
-// it drops ticks when the receiver is slow. It panics if d <= 0.
 func (f *Fake) NewTicker(d time.Duration) Ticker {
 	if d <= 0 {
 		panic("clock: non-positive ticker period")
@@ -62,14 +56,13 @@ func (f *Fake) NewTicker(d time.Duration) Ticker {
 	return &fakeTicker{f: f, w: w}
 }
 
-// Advance moves the clock forward by d and fires every due timer and tick.
+// Advance moves the clock forward by d and fires every due timer.
 func (f *Fake) Advance(d time.Duration) {
 	f.mu.Lock()
 	f.setLocked(f.now.Add(d))
 	f.mu.Unlock()
 }
 
-// Set moves the clock to t (never backwards) and fires what is due.
 func (f *Fake) Set(t time.Time) {
 	f.mu.Lock()
 	if t.After(f.now) {
@@ -78,16 +71,12 @@ func (f *Fake) Set(t time.Time) {
 	f.mu.Unlock()
 }
 
-// Waiters returns the number of pending timers and tickers.
 func (f *Fake) Waiters() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.waiters)
 }
 
-// WaiterChange returns a channel closed the next time a timer or ticker is
-// added or removed, so tests can wait for a goroutine to block on the clock
-// without sleeping.
 func (f *Fake) WaiterChange() <-chan struct{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -16,9 +16,6 @@ var (
 	placeholderRE = regexp.MustCompile(`\{[^{}]+\}`)
 )
 
-// validate checks the cache_invalidator section. Structural rules (enums,
-// addresses, formats) always apply; required values (source endpoint, Redis,
-// namespace, templates) only when strict.
 func (ci CacheInvalidator) validate(v *validator, strict bool) {
 	v.listen(cacheKey+".admin_listen", ci.AdminListen)
 	v.envName(cacheKey+".validate_dsn_env", ci.ValidateDSNEnv, false)

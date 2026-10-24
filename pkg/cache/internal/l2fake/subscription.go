@@ -9,23 +9,22 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2"
 )
 
-// subscription is one client's pub/sub connection.
 type subscription struct {
 	channel string
-	owner   *Client // set once at creation
+	owner   *Client
 
-	mu        sync.Mutex // protects every field below
+	mu        sync.Mutex
 	queue     []item
 	connected bool
 	paused    bool
 	waiting   bool
 	closed    bool
-	notify    chan struct{} // capacity 1: wakes Receive
-	changed   chan struct{} // closed and replaced on every state change
+	notify    chan struct{}
+	changed   chan struct{}
 }
 
 type item struct {
-	kind l2.EventKind // EventConnected, EventDisconnected or 0 for a message
+	kind l2.EventKind
 	msg  string
 }
 
@@ -37,8 +36,6 @@ func newSubscription(channel string) *subscription {
 	}
 }
 
-// setConnected models the connection going down or coming back; the
-// client reconnects by itself and announces it with EventConnected.
 func (s *subscription) setConnected(up bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -54,9 +51,6 @@ func (s *subscription) setConnected(up bool) {
 	s.signalLocked()
 }
 
-// deliver queues a published message. A full buffer drops the connection
-// (Redis client-output-buffer-limit): queued messages are lost and the client
-// sees a disconnect followed by a reconnect.
 func (s *subscription) deliver(msg string, limit int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -114,7 +108,7 @@ func (s *subscription) receive(ctx context.Context) (l2.Event, error) {
 			}
 			e, err := l2.DecodeMessage(it.msg)
 			if err != nil {
-				continue // a real client would skip garbage on the channel too
+				continue
 			}
 			return e, nil
 		}
@@ -135,8 +129,6 @@ func (s *subscription) receive(ctx context.Context) (l2.Event, error) {
 	}
 }
 
-// waitIdle blocks until the queue is empty and the receiver is waiting for
-// the next event. A closed subscription is idle.
 func (s *subscription) waitIdle(ctx context.Context) error {
 	for {
 		s.mu.Lock()

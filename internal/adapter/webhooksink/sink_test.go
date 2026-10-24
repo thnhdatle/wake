@@ -221,7 +221,6 @@ func TestSink_Retry_ClientTimeoutAndRefusedConnection(t *testing.T) {
 	a.waitAcks(t, 1)
 	assert.Equal(t, 1, obs.retriesFor(webhooksink.RetryReasonNetwork))
 
-	// Nothing listens on a closed listener's port: connection refused.
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	addr := ln.Addr().String()
@@ -267,7 +266,6 @@ func TestSink_Send_EventTooLargeBlocks(t *testing.T) {
 	assert.True(t, s.Health().IsHealthy())
 }
 
-// distinctLaneKeys returns n keys that hash into n different lanes.
 func distinctLaneKeys(n, lanes int) []string {
 	used := map[int]bool{}
 	var keys []string
@@ -345,7 +343,6 @@ func TestSink_Batching_MaxEventsAndMaxBytes(t *testing.T) {
 	assert.Equal(t, []int{3, 3, 1}, sizes)
 	a.waitAcks(t, 8)
 
-	// max_bytes: each payload is ~40 bytes, so a 100-byte limit takes 2.
 	gate2 := make(chan struct{})
 	rv2 := newReceiver(t, clk, func(n int, _ *received) action {
 		if n == 0 {
@@ -390,7 +387,6 @@ func TestSink_Linger_WaitsForMoreRecords(t *testing.T) {
 	clk.Advance(time.Millisecond)
 	assert.Len(t, rv.next(t).items(t), 2, "records sent within linger share a batch")
 
-	// A full batch leaves at once.
 	send(t, s, keyedRec(a, 3, "k"), keyedRec(a, 4, "k"), keyedRec(a, 5, "k"))
 	assert.Len(t, rv.next(t).items(t), 3)
 	a.waitAcks(t, 5)
@@ -413,7 +409,7 @@ func TestSink_Send_BlocksWhileQueueFull(t *testing.T) {
 	a := newAcker()
 	send(t, s, keyedRec(a, 1, "k"))
 	rv.next(t)
-	send(t, s, keyedRec(a, 2, "k")) // queued behind the batch in flight
+	send(t, s, keyedRec(a, 2, "k"))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Command verify checks the Wake-Signature header of a Wake webhook request
-// against its raw body. Copy the verify function into your receiver.
-//
-//	WAKE_WEBHOOK_SECRET=... go run ./examples/webhook-verify/go --signature "t=...,v1=..." body.json
-//
-// It prints "valid" and exits 0, or prints "invalid: <reason>" and exits 1;
-// usage errors exit 2.
+// Command verify checks the Wake-Signature header of a Wake webhook request against its raw body.
 package main
 
 import (
@@ -22,23 +16,15 @@ import (
 	"time"
 )
 
-// defaultTolerance is the accepted difference between the signature time
-// and the receiver's clock; it bounds replays of a captured request.
 const defaultTolerance = 5 * time.Minute
 
-// secretEnv names the environment variable holding the shared secret (the
-// variable Wake's webhook.secret_env names).
 const secretEnv = "WAKE_WEBHOOK_SECRET" //nolint:gosec // G101: an environment variable name, not a secret
 
-// invalidError describes why a signature is rejected.
 type invalidError string
 
 func (e invalidError) Error() string { return string(e) }
 
-// verify checks header "t=<unix>,v1=<hex>" against the raw body: the HMAC-
-// SHA256 of "<t>.<body>" with secret, compared in constant time; any of
-// several v1 values may match (secret rotation); t must lie within
-// tolerance of now.
+// verify checks the Wake-Signature header against the raw body and the secret.
 func verify(secret []byte, header string, body []byte, now time.Time, tolerance time.Duration) error {
 	var ts string
 	var sigs []string
@@ -78,7 +64,6 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Getenv, os.Stdin, os.Stdout, os.Stderr, time.Now()))
 }
 
-// run is main with its dependencies injected; it returns the exit code.
 func run(args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	fs.SetOutput(stderr)

@@ -5,18 +5,12 @@ package event
 // Op is the operation code of a CDC data event.
 type Op string
 
-// Operations defined by the CDC event contract. Consumers must ignore (and count) any
-// other value; see Op.Known.
+// Operations defined by the CDC event contract.
 const (
-	// OpCreate is an inserted row.
-	OpCreate Op = "c"
-	// OpUpdate is an updated row.
-	OpUpdate Op = "u"
-	// OpDelete is a deleted row.
-	OpDelete Op = "d"
-	// OpRead is a snapshot read of an existing row.
-	OpRead Op = "r"
-	// OpTruncate is a table truncation; it carries no key.
+	OpCreate   Op = "c"
+	OpUpdate   Op = "u"
+	OpDelete   Op = "d"
+	OpRead     Op = "r"
 	OpTruncate Op = "t"
 )
 

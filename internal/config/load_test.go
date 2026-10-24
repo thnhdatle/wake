@@ -180,8 +180,8 @@ func TestLoadWith(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		content string // written to a temp file when set
-		missing bool   // point at a file that does not exist
+		content string
+		missing bool
 		noFile  bool
 		wantErr string
 	}{
@@ -221,7 +221,6 @@ func TestLoadWith_SkipValidate(t *testing.T) {
 	assert.Equal(t, config.DefaultAdminListen, cfg.Admin.Listen)
 }
 
-// t.Setenv mutates the process environment, so this test cannot run in parallel.
 func TestLoad_ReadsProcessEnv(t *testing.T) { //nolint:paralleltest // uses t.Setenv
 	t.Setenv("WAKE_ADMIN_LISTEN", "0.0.0.0:9999")
 	path := writeFile(t, minimalYAML)

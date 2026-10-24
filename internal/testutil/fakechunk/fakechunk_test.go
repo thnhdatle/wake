@@ -331,7 +331,6 @@ func TestReader_OpenExported_SeesRowsAsOfOpen(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []pipeline.ChunkRow{fakechunk.Row(1, `"changed"`), fakechunk.Row(3, `"new"`)}, live.Rows)
 
-	// A session opened later sees the newer rows, the old one does not.
 	sess2, err := r.OpenExported(context.Background(), "snap-2")
 	require.NoError(t, err)
 	c2, err := sess2.ReadChunk(context.Background(), req("", 10))

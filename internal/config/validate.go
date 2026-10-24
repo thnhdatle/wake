@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	maxSourceNameUnkeyed  = 51 // wake_<name>_insert must fit the 63-byte identifier limit
+	maxSourceNameUnkeyed  = 51
 	maxPort               = 65535
 	sourceNameDescription = "[a-z0-9_]{1,58}"
 	identifierDescription = "[A-Za-z0-9_-]+"
@@ -26,7 +26,6 @@ var (
 	envNameRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
-// validator accumulates every problem so they are reported at once.
 type validator struct{ errs []error }
 
 func (v *validator) add(key, format string, args ...any) {
@@ -35,10 +34,7 @@ func (v *validator) add(key, format string, args ...any) {
 
 func (v *validator) result() error { return errors.Join(v.errs...) }
 
-// Validate checks the whole configuration and reports every problem found as
-// a joined list of *ValidationError (each matches ErrInvalid). The
-// cache_invalidator section is checked strictly only when it is configured
-// (see CacheInvalidator.Configured).
+// Validate checks the whole configuration and reports every problem found.
 func (c Config) Validate() error {
 	v := &validator{}
 	c.validateSource(v)
@@ -53,8 +49,6 @@ func (c Config) Validate() error {
 	return v.result()
 }
 
-// ValidateCacheInvalidator checks the cache_invalidator section strictly, as
-// `wake cache-invalidator` needs it, ignoring every other section.
 func (c Config) ValidateCacheInvalidator() error {
 	v := &validator{}
 	c.CacheInvalidator.validate(v, true)
@@ -95,8 +89,6 @@ func (c Config) validateTables(v *validator) {
 	c.validateNameMap(v)
 }
 
-// validateNameMap checks keys, targets, collisions and the topic length of
-// every mapped name for each Kafka sink.
 func (c Config) validateNameMap(v *validator) {
 	keys := make([]string, 0, len(c.Tables.NameMap))
 	for k := range c.Tables.NameMap {
@@ -184,7 +176,6 @@ func (v *validator) requirePositive(key string, n int64) {
 	}
 }
 
-// envName checks that val names an environment variable.
 func (v *validator) envName(key, val string, required bool) {
 	switch {
 	case val == "" && required:
@@ -195,14 +186,12 @@ func (v *validator) envName(key, val string, required bool) {
 	}
 }
 
-// listen checks a host:port listen address.
 func (v *validator) listen(key, addr string) {
 	if err := checkHostPort(addr, false); err != nil {
 		v.add(key, "%q: %v", addr, err)
 	}
 }
 
-// hostPort checks a dial address, which needs a host.
 func (v *validator) hostPort(key, addr string) {
 	if err := checkHostPort(addr, true); err != nil {
 		v.add(key, "%q: %v", addr, err)
@@ -223,7 +212,6 @@ func checkHostPort(addr string, needHost bool) error {
 	return nil
 }
 
-// url checks an absolute URL with one of the schemes and no embedded password.
 func (v *validator) url(key, raw string, schemes ...string) {
 	u, err := url.Parse(raw)
 	switch {

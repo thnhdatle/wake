@@ -11,11 +11,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// pgEpochUnixMs is 2000-01-01T00:00:00Z in Unix milliseconds.
 const pgEpochUnixMs = 946_684_800_000
 
-// wire is a minimal pgoutput protocol version 1 encoder used to synthesize
-// test messages.
 type wire []byte
 
 func (w wire) u8(v byte) wire     { return append(w, v) }
@@ -60,7 +57,6 @@ func encodeRelation(rel *schema.Relation) wire {
 	return w
 }
 
-// encode returns the wire form of any decoded message.
 func encode(m pgoutput.Message) []byte {
 	switch m := m.(type) {
 	case *pgoutput.Begin:
@@ -93,18 +89,14 @@ func encode(m pgoutput.Message) []byte {
 	}
 }
 
-// txt returns a text tuple column.
 func txt(s string) pgoutput.TupleColumn {
 	return pgoutput.TupleColumn{Kind: pgoutput.TupleText, Data: []byte(s)}
 }
 
-// null returns a NULL tuple column.
 func null() pgoutput.TupleColumn { return pgoutput.TupleColumn{Kind: pgoutput.TupleNull} }
 
-// toast returns an unchanged-TOAST tuple column.
 func toast() pgoutput.TupleColumn { return pgoutput.TupleColumn{Kind: pgoutput.TupleUnchanged} }
 
-// col returns a relation column of a built-in type.
 func col(name string, oid uint32, key bool) schema.Column {
 	tn, _ := schema.TypeName(oid)
 	return schema.Column{Name: name, TypeOID: oid, TypeMod: -1, TypeName: tn, Key: key}

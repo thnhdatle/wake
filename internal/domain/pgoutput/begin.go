@@ -4,16 +4,12 @@ package pgoutput
 
 import "github.com/thnhdatle/wake/internal/domain/lsn"
 
-// Begin starts a transaction. FinalLSN is the LSN of the commit record,
-// i.e. the CDC event commit LSN of every event of the transaction.
 type Begin struct {
 	FinalLSN lsn.LSN
-	// TsMs is the commit time in Unix milliseconds.
-	TsMs int64
-	XID  uint32
+	TsMs     int64
+	XID      uint32
 }
 
-// MessageType implements Message.
 func (*Begin) MessageType() MessageType { return MessageBegin }
 
 func parseBegin(r *reader) *Begin {

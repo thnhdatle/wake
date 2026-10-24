@@ -41,7 +41,6 @@ func TestDecodeSchemaChange_NullColumnsBefore_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, validSchemaChange, string(out))
 
-	// A value (not only a pointer) marshals with its type member too.
 	out, err = json.Marshal(*sc)
 	require.NoError(t, err)
 	assert.JSONEq(t, validSchemaChange, string(out))

@@ -4,19 +4,13 @@ package buildinfo
 
 import "runtime"
 
-// Link-time variables set with -ldflags "-X .../buildinfo.Version=...".
-// They are the only package-level variables of this package and are never
-// modified at run time.
 var (
-	// Version is the release version, "dev" for local builds.
 	Version = "dev"
-	// Commit is the git commit the binary was built from.
-	Commit = "none"
-	// Date is the build date in RFC 3339 format.
-	Date = "unknown"
+	Commit  = "none"
+	Date    = "unknown"
 )
 
-// Info describes a build. JSON tags match GET /v1/version.
+// Info describes a build.
 type Info struct {
 	Version   string `json:"version"`
 	Commit    string `json:"commit"`
@@ -34,7 +28,6 @@ func Get() Info {
 	}
 }
 
-// String renders the information on one line for "wake version".
 func (i Info) String() string {
 	return "wake " + i.Version + " (commit " + i.Commit + ", built " + i.BuildDate + ", " + i.GoVersion + ")"
 }

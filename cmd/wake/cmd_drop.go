@@ -14,10 +14,8 @@ import (
 	"github.com/thnhdatle/wake/internal/config"
 )
 
-// errNotConfirmed reports a destructive command run without --yes.
 var errNotConfirmed = errors.New("refusing a destructive operation without --yes")
 
-// confirm returns a usage error unless --yes was given.
 func confirm(cmd *cobra.Command, what string) error {
 	if yes, _ := cmd.Flags().GetBool("yes"); yes {
 		return nil
@@ -108,8 +106,6 @@ func newPublicationDropCmd(cfgPath *string) *cobra.Command {
 	return c
 }
 
-// loadForDrop loads the configuration without validating the sinks (a
-// decommission must work even when they are gone); source.name is required.
 func loadForDrop(cfgPath string) (config.Config, error) {
 	cfg, err := loadConfig(cfgPath, true)
 	if err != nil {

@@ -9,12 +9,7 @@ import (
 
 const redactedPassword = "xxxxx"
 
-// Redacted returns a copy that is safe to print. Secrets live only in
-// environment variables and files named by *_env and *_file keys, so the
-// configuration holds no secret values; the one exception guarded here is a
-// password embedded in a URL (rejected by Validate, but present in a config
-// printed unvalidated), which is replaced by "xxxxx". Environment contents
-// are never read by this package.
+// Redacted returns a copy that is safe to print.
 func (c Config) Redacted() Config {
 	out := c
 	out.Lag.AlertWebhook = redactURL(c.Lag.AlertWebhook)
@@ -36,7 +31,6 @@ func (c Config) Redacted() Config {
 	return out
 }
 
-// redactURL masks the password of each comma-separated URL in raw.
 func redactURL(raw string) string {
 	if raw == "" {
 		return raw

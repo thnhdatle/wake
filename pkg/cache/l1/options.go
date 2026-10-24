@@ -26,8 +26,7 @@ type config struct {
 	jitterSeed uint64
 }
 
-// WithShards sets the shard count, rounded up to a power of two. The default
-// is 64, halved while a shard would hold fewer than 8 entries.
+// WithShards sets the shard count, rounded up to a power of two.
 func WithShards(n int) Option {
 	return func(c *config) error {
 		if n <= 0 || n > 1<<16 {
@@ -38,7 +37,7 @@ func WithShards(n int) Option {
 	}
 }
 
-// WithClock sets the time source (default: the system clock).
+// WithClock sets the time source.
 func WithClock(clk Clock) Option {
 	return func(c *config) error {
 		if clk == nil {
@@ -49,10 +48,7 @@ func WithClock(clk Clock) Option {
 	}
 }
 
-// WithJitter shortens every positive TTL passed to Set and SetIfUnchanged
-// by a uniformly random amount in [0, min(jitter, ttl/2)), drawn from a
-// per-shard PCG source seeded with seed, so expirations of entries written
-// together spread out.
+// WithJitter shortens positive TTLs by a random amount to spread expirations.
 func WithJitter(jitter time.Duration, seed uint64) Option {
 	return func(c *config) error {
 		if jitter < 0 {

@@ -20,13 +20,10 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// errNoSlot reports replication on a missing slot.
 var errNoSlot = errors.New("fakedb: slot does not exist")
 
-// pgEpochUnixMs is 2000-01-01T00:00:00Z in Unix milliseconds.
 const pgEpochUnixMs = 946_684_800_000
 
-// dbTable is a table with an int4 primary key "id" and a text column "v".
 type dbTable struct {
 	oid    uint32
 	schema string
@@ -35,7 +32,6 @@ type dbTable struct {
 
 func (t dbTable) qualified() string { return t.schema + "." + t.name }
 
-// rows maps "<schema>.<table>" to id to v.
 type rows map[string]map[int64]string
 
 func (r rows) clone() rows {
@@ -61,8 +57,6 @@ func (r rows) apply(ops []op) {
 	}
 }
 
-// op is one row change of a transaction: 'I'nsert, 'U'pdate, 'K'ey-changing
-// update (oldID -> id) or 'D'elete.
 type op struct {
 	kind  byte
 	table string
@@ -71,31 +65,19 @@ type op struct {
 	v     string
 }
 
-// walRecord is one pgoutput message in the WAL with the commit LSN of its
-// transaction (its own LSN for a non-transactional message).
 type walRecord struct {
 	at     lsn.LSN
 	commit lsn.LSN
 	data   []byte
 }
 
-// pendingTx is a transaction whose commit record is in the WAL but which is
-// not visible to snapshots yet.
 type pendingTx struct {
 	xid uint64
 	ops []op
 }
 
-// fakeDB is an in-memory Postgres for one database: committed transactions
-// append pgoutput messages to the WAL (proto 1, Relation before the first
-// change of a table in every transaction), chunk reads see the visible
-// rows with a pg_current_snapshot whose xip lists the transactions
-// committed in the WAL but not yet visible (CommitInvisible, Publish), and
-// the slot keeps its confirmed LSN across "processes". It implements
-// pipeline.ReplicationSource, SlotManager, Catalog, ChunkReader and
-// MessageEmitter.
 type fakeDB struct {
-	mu        sync.Mutex // protects every field below
+	mu        sync.Mutex
 	tables    map[string]dbTable
 	visible   rows
 	invisible []pendingTx
@@ -103,7 +85,7 @@ type fakeDB struct {
 	next      lsn.LSN
 	nextXID   uint64
 	tsMs      int64
-	walGrew   chan struct{} // closed and replaced on every WAL append
+	walGrew   chan struct{}
 
 	slotExists bool
 	confirmed  lsn.LSN
@@ -127,7 +109,6 @@ func newFakeDB(tables ...dbTable) *fakeDB {
 	return db
 }
 
-// load inserts rows 1..to without WAL (they predate the slot).
 func (db *fakeDB) load(table string, to int64) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -136,22 +117,18 @@ func (db *fakeDB) load(table string, to int64) {
 	}
 }
 
-// commit applies a transaction: WAL and visibility at once.
 func (db *fakeDB) commit(ops ...op) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.commitLocked(ops, true)
 }
 
-// commitInvisible writes the transaction's commit record but keeps its
-// changes invisible until publish.
 func (db *fakeDB) commitInvisible(ops ...op) uint64 {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.commitLocked(ops, false)
 }
 
-// publish makes every invisible transaction visible.
 func (db *fakeDB) publish() {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -165,7 +142,7 @@ func (db *fakeDB) commitLocked(ops []op, visible bool) uint64 {
 	db.nextXID++
 	xid := db.nextXID
 	db.tsMs++
-	msgs := [][]byte{nil} // Begin, filled in once the commit LSN is known
+	msgs := [][]byte{nil}
 	sent := map[string]bool{}
 	for _, o := range ops {
 		t := db.tables[o.table]
@@ -193,8 +170,6 @@ func (db *fakeDB) commitLocked(ops []op, visible bool) uint64 {
 	return xid
 }
 
-// EmitMessage implements pipeline.MessageEmitter with a transaction holding
-// one transactional logical message.
 func (db *fakeDB) EmitMessage(ctx context.Context, prefix string, content []byte) (lsn.LSN, error) {
 	if err := ctx.Err(); err != nil {
 		return lsn.InvalidLSN, err
@@ -221,7 +196,6 @@ func (db *fakeDB) EmitMessage(ctx context.Context, prefix string, content []byte
 	return start + 0x10, nil
 }
 
-// walEnd returns the end LSN of the last transaction.
 func (db *fakeDB) walEnd() lsn.LSN {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -231,20 +205,16 @@ func (db *fakeDB) walEnd() lsn.LSN {
 	return db.wal[len(db.wal)-1].commit + 8
 }
 
-// state returns a copy of the visible rows of a table.
 func (db *fakeDB) state(table string) map[int64]string {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return maps.Clone(db.visible[table])
 }
 
-// IdentifySystem implements pipeline.SlotManager.
 func (db *fakeDB) IdentifySystem(context.Context) (pipeline.SystemInfo, error) {
 	return pipeline.SystemInfo{SystemID: "7300000000000000001", Timeline: 1, DBName: "app"}, nil
 }
 
-// CreateSlot implements pipeline.SlotManager: the consistent point is the
-// end of the WAL and the exported snapshot the visible rows.
 func (db *fakeDB) CreateSlot(_ context.Context, name string) (pipeline.SlotInfo, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -255,7 +225,6 @@ func (db *fakeDB) CreateSlot(_ context.Context, name string) (pipeline.SlotInfo,
 	return pipeline.SlotInfo{Name: name, ConsistentPoint: db.next, SnapshotName: snap}, nil
 }
 
-// DropSlot implements pipeline.SlotManager.
 func (db *fakeDB) DropSlot(context.Context, string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -263,8 +232,6 @@ func (db *fakeDB) DropSlot(context.Context, string) error {
 	return nil
 }
 
-// StartReplication implements pipeline.ReplicationSource: it streams the
-// transactions whose commit LSN is at or after opts.Start.
 func (db *fakeDB) StartReplication(_ context.Context, opts pipeline.StartOptions) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -282,7 +249,6 @@ func (db *fakeDB) StartReplication(_ context.Context, opts pipeline.StartOptions
 	return nil
 }
 
-// Receive implements pipeline.ReplicationSource.
 func (db *fakeDB) Receive(ctx context.Context) (pipeline.ReplicationMessage, error) {
 	for {
 		db.mu.Lock()
@@ -305,7 +271,6 @@ func (db *fakeDB) Receive(ctx context.Context) (pipeline.ReplicationMessage, err
 	}
 }
 
-// SendStandbyStatus implements pipeline.StandbyStatusSender.
 func (db *fakeDB) SendStandbyStatus(_ context.Context, st pipeline.StandbyStatus) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -313,12 +278,10 @@ func (db *fakeDB) SendStandbyStatus(_ context.Context, st pipeline.StandbyStatus
 	return nil
 }
 
-// ServerSettings implements pipeline.Catalog.
 func (db *fakeDB) ServerSettings(context.Context) (pipeline.ServerSettings, error) {
 	return pipeline.ServerSettings{ServerVersionNum: 170002, WALLevel: "logical"}, nil
 }
 
-// Slot implements pipeline.Catalog.
 func (db *fakeDB) Slot(context.Context, string) (pipeline.SlotStatus, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -328,7 +291,6 @@ func (db *fakeDB) Slot(context.Context, string) (pipeline.SlotStatus, error) {
 	return pipeline.SlotStatus{Exists: true, Plugin: "pgoutput", ConfirmedFlush: db.confirmed, WALStatus: "reserved"}, nil
 }
 
-// PublicationTables implements pipeline.Catalog.
 func (db *fakeDB) PublicationTables(context.Context, []string) ([]pipeline.TableInfo, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -340,13 +302,10 @@ func (db *fakeDB) PublicationTables(context.Context, []string) ([]pipeline.Table
 	return out, nil
 }
 
-// clockTimestamp is the fake clock_timestamp().
 var clockTimestamp = time.UnixMilli(1_790_000_000_000).UTC()
 
-// CurrentTime implements pipeline.Catalog.
 func (db *fakeDB) CurrentTime(context.Context) (time.Time, error) { return clockTimestamp, nil }
 
-// ReadChunk implements pipeline.ChunkReader over the visible rows.
 func (db *fakeDB) ReadChunk(_ context.Context, req pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	db.mu.Lock()
 	c, err := readChunk(db.visible, req)
@@ -369,7 +328,6 @@ func (db *fakeDB) ReadChunk(_ context.Context, req pipeline.ChunkRequest) (pipel
 	return c, err
 }
 
-// OpenExported implements pipeline.ChunkReader.
 func (db *fakeDB) OpenExported(_ context.Context, name string) (pipeline.ChunkSession, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -417,7 +375,6 @@ func readChunk(r rows, req pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	return c, nil
 }
 
-// wire is a minimal pgoutput protocol version 1 encoder.
 type wire []byte
 
 func (w wire) u8(v byte) wire     { return append(w, v) }

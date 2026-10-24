@@ -9,40 +9,25 @@ import (
 	"strings"
 )
 
-// Error codes of the admin endpoints (docs/guides/errors.md).
 const (
-	// CodeNotReady: /readyz found a failing readiness check.
-	CodeNotReady = "not_ready"
-	// CodeStatusUnavailable: the status document cannot be built yet or now.
+	CodeNotReady          = "not_ready"
 	CodeStatusUnavailable = "status_unavailable"
-	// CodeInternal: a handler panicked.
-	CodeInternal = "internal"
+	CodeInternal          = "internal"
 )
 
-// Check is one readiness condition of /readyz.
 type Check struct {
-	// Name identifies the condition, e.g. "replication" or "sink".
-	Name string `json:"name"`
-	// Sink names the sink of a sink check.
-	Sink string `json:"sink,omitempty"`
-	OK   bool   `json:"ok"`
-	// State is the sink's delivery state of a sink check.
-	State string `json:"state,omitempty"`
-	// Code is the error code of a failing check (docs/guides/errors.md).
-	Code string `json:"code,omitempty"`
-	// Reason explains a failing or degraded check; never a secret or row value.
+	Name   string `json:"name"`
+	Sink   string `json:"sink,omitempty"`
+	OK     bool   `json:"ok"`
+	State  string `json:"state,omitempty"`
+	Code   string `json:"code,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
 
-// ReadinessFunc evaluates the readiness checks; the server is ready when
-// every check is OK.
 type ReadinessFunc func(ctx context.Context) []Check
 
-// StatusFunc returns the GET /v1/status document, encoded as JSON. An error
-// is answered with 503 status_unavailable.
 type StatusFunc func(ctx context.Context) (any, error)
 
-// errorBody is the error envelope of docs/guides/errors.md; /readyz adds its checks.
 type errorBody struct {
 	Error  errorDetail `json:"error"`
 	Checks []Check     `json:"checks,omitempty"`
@@ -54,7 +39,6 @@ type errorDetail struct {
 	RequestID string `json:"request_id"`
 }
 
-// readyBody is the 200 answer of /readyz.
 type readyBody struct {
 	Status string  `json:"status"`
 	Checks []Check `json:"checks"`

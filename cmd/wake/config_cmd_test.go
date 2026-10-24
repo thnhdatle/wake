@@ -31,8 +31,8 @@ func TestConfigValidate(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		path     string // used as is when content is empty
-		content  string // written to a temp file when set
+		path     string
+		content  string
 		wantErr  []string
 		wantCode int
 	}{
@@ -140,7 +140,6 @@ func TestConfigPrintBadFileExitsTwo(t *testing.T) {
 	assert.Equal(t, 2, ce.code)
 }
 
-// t.Setenv mutates the process environment, so this test cannot run in parallel.
 func TestConfigPrintAppliesEnvButNeverPrintsSecrets(t *testing.T) { //nolint:paralleltest // uses t.Setenv
 	t.Setenv("WAKE_ADMIN_LISTEN", "0.0.0.0:9999")
 	t.Setenv("WAKE_SOURCE_DSN", "postgres://user:dsn-secret@h/db")
@@ -153,8 +152,6 @@ func TestConfigPrintAppliesEnvButNeverPrintsSecrets(t *testing.T) { //nolint:par
 	assert.NotContains(t, out, "dsn-secret")
 }
 
-// An invalidator section with validate_dsn_env naming an unset variable: the
-// database check is skipped, so validation passes without a database.
 func TestConfigValidateSkipsTemplateCheckWithoutDSN(t *testing.T) {
 	t.Parallel()
 	cfg := writeConfig(t, minimalConfig+`cache_invalidator:

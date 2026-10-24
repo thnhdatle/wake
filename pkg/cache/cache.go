@@ -20,42 +20,35 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/l1"
 )
 
-// Cache is a two-tier read-through cache of values of type V. Values
-// returned by Get and GetOrLoad are shared with other callers: treat V as
-// immutable.
+// Cache is a two-tier read-through cache of values of type V.
 type Cache[V any] interface {
-	// Get returns the cached value of key. It reports a miss (not an error)
-	// when the key is absent, negatively cached or L2 is unreachable.
+	// Get returns the cached value of key.
 	Get(ctx context.Context, key string) (V, bool, error)
-	// GetOrLoad returns the cached value of key or loads it with load,
-	// coordinating concurrent loads in this process and across instances.
+	// GetOrLoad returns the cached value of key or loads it with load.
 	GetOrLoad(ctx context.Context, key string, load LoadFunc[V]) (V, error)
 	// Set stores v under key, replacing the value for every instance.
 	Set(ctx context.Context, key string, v V, opts ...SetOption) error
-	// Delete invalidates keys in L2 and in the L1 of every instance.
+	// Delete invalidates keys in L2 and in L1.
 	Delete(ctx context.Context, keys ...string) error
 	// Close stops background goroutines and releases connections.
 	Close() error
 }
 
-// LoadFunc loads the current value from the primary database (never a replica).
+// LoadFunc loads the current value of a key from the primary database.
 type LoadFunc[V any] func(ctx context.Context) (V, error)
 
-// item is what L1 stores: a value or a cached absence.
 type item[V any] struct {
 	v   V
 	neg bool
 }
 
-// cache implements Cache. Without an L2 backend it is an L1-only cache and
-// starts no goroutines.
 type cache[V any] struct {
 	ns      string
 	cfg     config
 	codec   Codec[V]
 	l1      *l1.Cache[item[V]]
 	env     *envelope
-	backend l2.Backend // nil: L1 only
+	backend l2.Backend
 	m       *metrics
 	group   singleflight.Group
 	signals loadSignals
@@ -64,25 +57,23 @@ type cache[V any] struct {
 
 	epoch   atomic.Uint64
 	epochOK atomic.Bool
-	epochMu sync.Mutex // serializes epoch adoption with its L1 flush
+	epochMu sync.Mutex
 	busUp   atomic.Bool
 	closed  atomic.Bool
 
 	instance string
 	lockSeq  atomic.Uint64
-	rngMu    sync.Mutex // protects rng
+	rngMu    sync.Mutex
 	rng      *mrand.Rand
 
-	wake      chan struct{} // capacity 1: wakes the maintenance goroutine
+	wake      chan struct{}
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	closeOnce sync.Once
 	closeErr  error
 }
 
-// New returns a cache for namespace ([A-Za-z0-9_-]+) whose L2 payloads are
-// encoded with codec. With an L2 configured it starts the invalidation-bus
-// subscriber and the L2 maintenance goroutine; Close stops both.
+// New returns a cache for namespace whose L2 payloads are encoded with codec.
 func New[V any](namespace string, codec Codec[V], opts ...Option) (Cache[V], error) {
 	if !validNamespace(namespace) {
 		return nil, invalid("namespace %q must match [A-Za-z0-9_-]+", namespace)
@@ -112,7 +103,7 @@ func New[V any](namespace string, codec Codec[V], opts ...Option) (Cache[V], err
 		return nil, fmt.Errorf("cache: %w", err)
 	}
 	var seed [16]byte
-	_, _ = rand.Read(seed[:]) // crypto/rand.Read never fails (Go >= 1.24)
+	_, _ = rand.Read(seed[:])
 	c := &cache[V]{
 		ns: namespace, cfg: cfg, codec: codec, l1: l1c, env: env, m: m,
 		pending:  newPendingSet(cfg.maxPending),
@@ -130,7 +121,6 @@ func New[V any](namespace string, codec Codec[V], opts ...Option) (Cache[V], err
 	return c, nil
 }
 
-// start connects the L2 backend and starts the two owned goroutines.
 func (c *cache[V]) start(namespace string) error {
 	b, err := c.cfg.backend(l2.Config{
 		Namespace: namespace, Channel: c.cfg.channel, BusHealthCheck: c.cfg.degradedTTL / 2,
@@ -161,9 +151,6 @@ func validNamespace(ns string) bool {
 	return true
 }
 
-// Close stops the subscriber and maintenance goroutines, waits for them and
-// closes the L2 backend. It is idempotent; later calls return errClosed
-// from every other method.
 func (c *cache[V]) Close() error {
 	c.closeOnce.Do(func() {
 		c.closed.Store(true)
@@ -181,8 +168,6 @@ func (c *cache[V]) Close() error {
 	return c.closeErr
 }
 
-// degraded reports whether invalidations may be missed (L2 breaker not
-// closed or bus down); L1 ages are then capped to the degraded TTL.
 func (c *cache[V]) degraded() bool {
 	return c.backend != nil && (!c.busUp.Load() || !c.breaker.allow())
 }
@@ -198,7 +183,6 @@ func (c *cache[V]) genTTL(ttl time.Duration) time.Duration {
 	return max(ttl, c.cfg.ttl, c.cfg.negTTL) + c.cfg.lockTimeout + genGrace
 }
 
-// valueTTL returns the configured TTL minus a random jitter.
 func (c *cache[V]) valueTTL() time.Duration {
 	if c.cfg.jitter <= 0 {
 		return c.cfg.ttl
@@ -208,7 +192,6 @@ func (c *cache[V]) valueTTL() time.Duration {
 	return c.cfg.ttl - time.Duration(c.rng.Int64N(int64(c.cfg.jitter)))
 }
 
-// spread returns d plus up to 50% random jitter (poll backoff).
 func (c *cache[V]) spread(d time.Duration) time.Duration {
 	c.rngMu.Lock()
 	defer c.rngMu.Unlock()
@@ -219,9 +202,6 @@ func (c *cache[V]) newLockToken() string {
 	return c.instance + "-" + strconv.FormatUint(c.lockSeq.Add(1), 10)
 }
 
-// adoptEpoch switches to epoch e. The new epoch is stored before L1 is
-// flushed: a reader that loaded the old epoch captured its L1 token before
-// the flush, so its insert is refused.
 func (c *cache[V]) adoptEpoch(e uint64) {
 	c.epochMu.Lock()
 	defer c.epochMu.Unlock()
@@ -237,7 +217,6 @@ func (c *cache[V]) adoptEpoch(e uint64) {
 	c.l1.Flush()
 }
 
-// ensureEpoch makes sure the namespace epoch is known, reading it if not.
 func (c *cache[V]) ensureEpoch(ctx context.Context) bool {
 	if c.epochOK.Load() {
 		return true
@@ -252,19 +231,16 @@ func (c *cache[V]) ensureEpoch(ctx context.Context) bool {
 	return true
 }
 
-// l2Readable reports whether this call may read L2 for key.
 func (c *cache[V]) l2Readable(ctx context.Context, key string) bool {
 	return c.l2Writable(ctx) && !c.pending.blocks(key)
 }
 
-// l2Writable reports whether this call may write L2.
 func (c *cache[V]) l2Writable(ctx context.Context) bool {
 	return c.backend != nil && c.breaker.allow() && c.ensureEpoch(ctx)
 }
 
 func (c *cache[V]) l2OK() { c.breaker.success() }
 
-// l2Failed counts an L2 failure unless the caller's own context ended.
 func (c *cache[V]) l2Failed(ctx context.Context, _ error) {
 	if ctx.Err() != nil {
 		return

@@ -65,7 +65,6 @@ func TestStore_Save_DirSyncFailureAfterRename(t *testing.T) {
 
 	s := pipeline.NewState("wake_app", "1")
 	require.ErrorIs(t, st.Save(ctx, s), errInjected)
-	// The rename happened, so the new content is readable, never a mix.
 	got, err := st.Load(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "wake_app", got.SlotName)

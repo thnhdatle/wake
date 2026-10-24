@@ -8,18 +8,16 @@ import (
 	"sync/atomic"
 )
 
-// shard is one LRU partition with its own lock and invalidation counter.
 type shard[V any] struct {
-	mu         sync.Mutex // protects items, the list links, bytes and rng
+	mu         sync.Mutex
 	items      map[string]*node[V]
-	head       node[V] // sentinel: head.next is most, head.prev least recently used
+	head       node[V]
 	bytes      int64
 	maxEntries int
 	maxBytes   int64
 	rng        *rand.Rand
-	// inval counts invalidations; written under mu, read lock-free by Token.
-	inval atomic.Uint64
-	_     [64]byte // keeps neighboring shards on separate cache lines
+	inval      atomic.Uint64
+	_          [64]byte
 }
 
 type node[V any] struct {
@@ -27,8 +25,8 @@ type node[V any] struct {
 	value     V
 	size      int64
 	version   uint64
-	storedAt  int64 // unix nanoseconds
-	expiresAt int64 // unix nanoseconds; 0 never expires
+	storedAt  int64
+	expiresAt int64
 	prev      *node[V]
 	next      *node[V]
 }
@@ -42,7 +40,6 @@ func (s *shard[V]) init(maxEntries int, maxBytes int64, rng *rand.Rand) {
 	s.rng = rng
 }
 
-// lookupLocked returns the node of key and moves it to the front.
 func (s *shard[V]) lookupLocked(key string) *node[V] {
 	n := s.items[key]
 	if n == nil {
@@ -74,12 +71,8 @@ func (s *shard[V]) removeLocked(n *node[V]) {
 	s.bytes -= n.size
 }
 
-// invalidateLocked counts one invalidation.
 func (s *shard[V]) invalidateLocked() { s.inval.Add(1) }
 
-// insertLocked stores n unless an entry with a higher version exists or n
-// cannot fit; an existing entry with a version not above n's is removed
-// either way.
 func (s *shard[V]) insertLocked(n *node[V]) bool {
 	if old := s.items[n.key]; old != nil {
 		if old.version > n.version {

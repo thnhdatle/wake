@@ -41,9 +41,6 @@ Every target prints a one-line PASS or FAIL summary.
 | `make test` | unit tests, race detector |
 | `make test-integration PG=17` | integration tests, Postgres 14 to 17 |
 | `make coverage` | coverage thresholds (repo 80%, domain and app 90%) |
-| `make mutation` | mutation tests, score 60% |
-| `make acceptance` | [acceptance suite](acceptance/README.md); `CI=1` CI thresholds, `ONLY=<id>,<id>` subset |
-| `make bench` | benchmarks |
 | `make fuzz FUZZTIME=30s` | every fuzz target |
 | `make examples` | run examples, check output |
 | `make quickstart-test` | README quickstart in a clean clone |
@@ -61,11 +58,9 @@ Every target prints a one-line PASS or FAIL summary.
 |---|---|---|
 | Unit | next to the code | `make test` |
 | Integration | `*_integration_test.go`, `//go:build integration` | `make test-integration PG=<14\|15\|16\|17>` |
-| Acceptance | `acceptance/` ([README](acceptance/README.md)) | `make acceptance` |
 | Fuzz | next to parsers, corpus in `testdata/fuzz` | `make fuzz` |
 
-Unit tests use in-memory fakes and `t.Parallel()`. Integration tests see the Postgres version as `WAKE_TEST_PG`. A full acceptance run takes 45 to
-60 minutes. Do not run other compose stacks at the same time.
+Unit tests use in-memory fakes and `t.Parallel()`. Integration tests see the Postgres version as `WAKE_TEST_PG`.
 
 ## Commit format
 

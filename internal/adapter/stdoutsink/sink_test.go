@@ -37,12 +37,11 @@ var (
 	errWrite = errors.New("broken pipe")
 )
 
-// writer is a goroutine-safe buffer that can fail writes and flushes.
 type writer struct {
-	mu         sync.Mutex // protects every field
+	mu         sync.Mutex
 	buf        bytes.Buffer
-	failWrites int // next writes that write half and fail
-	failFlush  int // next flushes that fail
+	failWrites int
+	failFlush  int
 	flushes    int
 	changed    chan struct{}
 }
@@ -59,7 +58,7 @@ func (w *writer) Write(p []byte) (int, error) {
 		w.buf.Write(p[:n])
 		return n, errWrite
 	}
-	w.buf.Write(p) // bytes.Buffer.Write never fails
+	w.buf.Write(p)
 	return len(p), nil
 }
 
@@ -92,9 +91,8 @@ func (w *writer) String() string {
 	return w.buf.String()
 }
 
-// acker records acknowledged tokens.
 type acker struct {
-	mu      sync.Mutex // protects every field
+	mu      sync.Mutex
 	order   []uint64
 	changed chan struct{}
 }
@@ -151,9 +149,8 @@ func cfg() config.Sink {
 	return config.Sink{Name: "out", Type: config.SinkStdout, MaxEvents: 10, MaxBytes: 1 << 20}
 }
 
-// recorder is an Observer and AckObserver.
 type recorder struct {
-	mu       sync.Mutex // protects every field
+	mu       sync.Mutex
 	sent     int
 	acked    int
 	retries  int

@@ -12,20 +12,15 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Session reads chunks inside one transaction at an imported snapshot
-// (pipeline.ChunkSession). It is safe for concurrent use; reads are
-// serialized.
 type Session struct {
 	r *ChunkReader
 
-	mu     sync.Mutex // protects every field below
+	mu     sync.Mutex
 	conn   *pgx.Conn
 	tx     pgx.Tx
 	closed bool
 }
 
-// ReadChunk implements pipeline.ChunkSession; Chunk.Snapshot and
-// CommittedXIP stay empty.
 func (s *Session) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	if err := validateRequest(&req); err != nil {
 		return pipeline.Chunk{}, err
@@ -40,8 +35,6 @@ func (s *Session) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pip
 	return readChunk(ctx, s.tx, &req)
 }
 
-// Close implements pipeline.ChunkSession: it ends the transaction and
-// returns the connection to the pool. A second Close is ErrSessionClosed.
 func (s *Session) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -59,5 +52,4 @@ func (s *Session) Close(ctx context.Context) error {
 	return nil
 }
 
-// Compile-time check of the port Session implements.
 var _ pipeline.ChunkSession = (*Session)(nil)

@@ -12,7 +12,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// mustDecode feeds messages to the decoder and fails the test on error.
 func mustDecode(t *testing.T, dec *pgoutput.Decoder, msgs ...pgoutput.Message) {
 	t.Helper()
 	for _, m := range msgs {

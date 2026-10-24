@@ -10,9 +10,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// BenchmarkRecord_NewEventRecord encodes one event into a sink record
-// (payload and canonical key): the throughput acceptance test insert (bigint key, ~170-byte
-// text payload) and a wide ten-column update with an unchanged TOAST column.
 func BenchmarkRecord_NewEventRecord(b *testing.B) {
 	key := change.Row{{Name: "id", Value: []byte("4242424242")}}
 	cases := []struct {

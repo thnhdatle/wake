@@ -36,8 +36,6 @@ const (
 	shortWait = 30 * time.Second
 )
 
-// ackCounter is the ack tracker of the tests: it counts acknowledgements
-// per transaction.
 type ackCounter struct {
 	mu    sync.Mutex
 	acked map[uint64]int
@@ -73,7 +71,6 @@ type env struct {
 	prefix string
 }
 
-// sinkConfig is a kafka sink of k; TLS and SCRAM-SHA-512 follow k.
 func sinkConfig(k *kafkatest.Kafka, prefix string) config.Sink {
 	cfg := config.Sink{
 		Name: "kafka-" + prefix, Type: config.SinkKafka, Tables: []string{"*"},
@@ -103,7 +100,6 @@ func credentials(user, pass string) func(string) string {
 	}
 }
 
-// runSink starts a sink until the test ends.
 func runSink(t *testing.T, k *kafkatest.Kafka, cfg config.Sink, getenv func(string) string) *env {
 	t.Helper()
 	opts := []kafkasink.Option{
@@ -151,8 +147,6 @@ func (e *env) waitHealth(t *testing.T, state pipeline.SinkState) pipeline.SinkHe
 
 func (e *env) topic(table string) string { return e.prefix + ".public." + table }
 
-// rowEvent is the event of transaction tx on public.<table>; tx orders
-// events (its commit LSN grows with tx).
 func rowEvent(op change.Op, tx uint64, table, key string) pipeline.Record {
 	ev := &change.Event{
 		ID:            change.StreamID(lsn.LSN(0x1000000+tx*0x100), 0),
@@ -181,9 +175,6 @@ func header(r *kgo.Record, key string) string {
 
 func eventID(tx uint64) string { return change.StreamID(lsn.LSN(0x1000000+tx*0x100), 0).String() }
 
-// The Kafka tests run one broker at a time (no t.Parallel at the top level)
-// to bound the memory they take from the shared Docker VM.
-//
 //nolint:paralleltest,tparallel // see above
 func TestKafkaSink_Plain(t *testing.T) {
 	k := kafkatest.Start(t)
@@ -334,8 +325,6 @@ func testTopicLimit(t *testing.T, k *kafkatest.Kafka) {
 	big := rowEvent(change.OpCreate, 1, "users", "1")
 	big.Payload = []byte(`{"blob":"` + strings.Repeat("y", 8192) + `"}`)
 	e.send(t, big, 1)
-	// The topic may still be propagating to the broker's metadata (unknown
-	// topic, also sink_fatal) before the limit check is reached.
 	require.Eventually(t, func() bool {
 		h := e.sink.Health()
 		return h.IsFatal() && strings.Contains(h.Reason, "max.message.bytes 2048")
@@ -368,8 +357,6 @@ func testAutoCreate(t *testing.T, k *kafkatest.Kafka) {
 	assert.Len(t, topics[e.topic("orders")].Partitions, 3)
 }
 
-// keyedLoad sends n updates over keys keys, round robin, and returns them
-// as tx numbers per key in send order.
 func keyedLoad(t *testing.T, e *env, n, keys int, between func(i int)) map[string][]uint64 {
 	t.Helper()
 	want := map[string][]uint64{}
@@ -385,8 +372,6 @@ func keyedLoad(t *testing.T, e *env, n, keys int, between func(i int)) map[strin
 	return want
 }
 
-// checkOrder verifies that each key's records, after dropping repeated ids,
-// arrive in send order and that every sent id arrived.
 func checkOrder(t *testing.T, recs []*kgo.Record, want map[string][]uint64) {
 	t.Helper()
 	got := map[string][]string{}

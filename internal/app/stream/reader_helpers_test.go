@@ -28,11 +28,8 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakespill"
 )
 
-// recordedDir holds real Postgres 17 traffic recorded by
-// scripts/record_pgoutput.sh: one "<lsn> <xid> <hex>" line per message.
 const recordedDir = "../../../testdata/pgoutput"
 
-// walMsg is one recorded or synthesized XLogData message.
 type walMsg struct {
 	at   lsn.LSN
 	data []byte
@@ -62,7 +59,6 @@ func readRecorded(tb testing.TB, name string) []walMsg {
 	return msgs
 }
 
-// serverTime is the XLogData server time of pushed messages.
 var serverTime = time.UnixMilli(1_792_308_700_000).UTC()
 
 func xlog(m walMsg) pipeline.ReplicationMessage {
@@ -71,7 +67,6 @@ func xlog(m walMsg) pipeline.ReplicationMessage {
 	}}
 }
 
-// fixture is a reader wired to fakes.
 type fixture struct {
 	src     *fakerepl.Source
 	tracker *AckTracker
@@ -91,9 +86,7 @@ type fixtureOpts struct {
 	sinkOpts    []fakesink.Option
 	readerOpts  []ReaderOption
 	schemaState schema.RegistryState
-	// route replaces the fake sink as the only route (benchmarks); f.sink
-	// is then unused.
-	route pipeline.Sink
+	route       pipeline.Sink
 }
 
 func newFixture(tb testing.TB, o fixtureOpts) *fixture {
@@ -132,7 +125,6 @@ func newFixture(tb testing.TB, o fixtureOpts) *fixture {
 	return f
 }
 
-// start runs the reader until the test ends.
 func (f *fixture) start(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -144,7 +136,6 @@ func (f *fixture) start(t *testing.T) {
 	})
 }
 
-// push scripts messages.
 func (f *fixture) push(t *testing.T, msgs ...walMsg) {
 	t.Helper()
 	for _, m := range msgs {
@@ -152,8 +143,6 @@ func (f *fixture) push(t *testing.T, msgs ...walMsg) {
 	}
 }
 
-// finish closes the script and returns Run's error, which wraps
-// fakerepl.ErrClosed once every message was processed.
 func (f *fixture) finish(t *testing.T) error {
 	t.Helper()
 	f.src.Close()
@@ -167,7 +156,6 @@ func (f *fixture) finish(t *testing.T) error {
 	}
 }
 
-// runAll processes msgs to completion and returns the sink's records.
 func runAll(t *testing.T, o fixtureOpts, msgs []walMsg) ([]pipeline.Record, *fixture) {
 	t.Helper()
 	f := newFixture(t, o)
@@ -177,7 +165,6 @@ func runAll(t *testing.T, o fixtureOpts, msgs []walMsg) ([]pipeline.Record, *fix
 	return f.sink.Received(), f
 }
 
-// render formats records as golden lines.
 func render(recs []pipeline.Record) string {
 	var b strings.Builder
 	for i := range recs {
@@ -196,7 +183,6 @@ func ids(recs []pipeline.Record) []string {
 	return out
 }
 
-// wire is a minimal pgoutput encoder for synthesized traffic.
 type wire []byte
 
 func (w wire) u8(v byte) wire     { return append(w, v) }
@@ -217,7 +203,6 @@ func (w wire) text(vals ...string) wire {
 	return w
 }
 
-// synth builds pgoutput messages with increasing WAL positions.
 type synth struct {
 	at   lsn.LSN
 	msgs []walMsg
@@ -236,8 +221,6 @@ func (s *synth) commit(final, end lsn.LSN) {
 	s.add(wire{'C'}.u8(0).u64(uint64(final)).u64(uint64(end)).u64(0))
 }
 
-// relation adds a table with an int4 key column "id" (unless keyless) and
-// text columns.
 func (s *synth) relation(oid uint32, ns, name string, identity byte, cols ...string) {
 	w := wire{'R'}.u32(oid).cstr(ns).cstr(name).u8(identity).u16(uint16(len(cols) + 1)) //nolint:gosec // small
 	flag := byte(1)
@@ -284,7 +267,6 @@ func (s *synth) message(transactional bool, at lsn.LSN, prefix, content string) 
 	s.add(append(w, content...))
 }
 
-// observed is one TxObserver call.
 type observed struct {
 	call   string
 	table  string
@@ -292,7 +274,6 @@ type observed struct {
 	before string
 }
 
-// fakeObserver records calls and can hold transactions open.
 type fakeObserver struct {
 	mu        sync.Mutex
 	calls     []observed
@@ -346,7 +327,6 @@ func (o *fakeObserver) Calls() []observed {
 	return slices.Clone(o.calls)
 }
 
-// fakeMetrics records reader metrics.
 type fakeMetrics struct {
 	mu        sync.Mutex
 	types     []string
@@ -386,7 +366,6 @@ func (m *fakeMetrics) Spilled(int64) {
 	m.spilled++
 }
 
-// fakeGate is a Gate released by the test.
 type fakeGate struct {
 	ch   chan struct{}
 	once sync.Once
@@ -396,7 +375,6 @@ func newFakeGate() *fakeGate                  { return &fakeGate{ch: make(chan s
 func (g *fakeGate) Released() <-chan struct{} { return g.ch }
 func (g *fakeGate) release()                  { g.once.Do(func() { close(g.ch) }) }
 
-// fakeSchemaStore records saved registry states.
 type fakeSchemaStore struct {
 	mu     sync.Mutex
 	states []schema.RegistryState
@@ -419,7 +397,6 @@ func (s *fakeSchemaStore) Saved() []schema.RegistryState {
 	return slices.Clone(s.states)
 }
 
-// fakeActivity counts Touch calls.
 type fakeActivity struct {
 	mu sync.Mutex
 	n  int
@@ -437,7 +414,6 @@ func (a *fakeActivity) count() int {
 	return a.n
 }
 
-// keyColumns maps "<schema>.<table>" to primary keys.
 type keyColumns struct {
 	keys map[string][]string
 	err  error

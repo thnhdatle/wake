@@ -14,46 +14,31 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// HeartbeatPrefix is the logical message prefix of heartbeats; the
-// decoder consumes these messages internally.
 const HeartbeatPrefix = "wake.heartbeat"
 
-// DefaultHeartbeatInterval is the default heartbeat.interval.
 const DefaultHeartbeatInterval = time.Minute
 
-// HeartbeatOption configures a Heartbeat.
 type HeartbeatOption func(*Heartbeat)
 
-// WithHeartbeatInterval sets heartbeat.interval (default
-// DefaultHeartbeatInterval): the idle time before a heartbeat, the time
-// between heartbeats while idle, and the timeout of each emit.
 func WithHeartbeatInterval(d time.Duration) HeartbeatOption {
 	return func(h *Heartbeat) { h.interval = d }
 }
 
-// WithHeartbeatLogger sets the logger (default: discard).
 func WithHeartbeatLogger(l *slog.Logger) HeartbeatOption {
 	return func(h *Heartbeat) { h.logger = l }
 }
 
-// Heartbeat emits a transactional `wake.heartbeat` logical message whenever
-// the captured tables were idle for heartbeat.interval, so the server
-// sends a transaction the ack tracker confirms at once, the confirmed LSN
-// advances and WAL written for other databases can be recycled. The reader
-// calls Touch for every transaction with captured changes; while it does so
-// at least once per interval, no heartbeat is emitted. A failed emit is
-// logged and retried one interval later.
+// Heartbeat emits a logical message when the captured tables are idle.
 type Heartbeat struct {
 	emitter  pipeline.MessageEmitter
 	clock    clock.Clock
 	interval time.Duration
 	logger   *slog.Logger
 
-	last atomic.Int64 // Unix ns of the latest activity or heartbeat attempt
+	last atomic.Int64
 }
 
-// NewHeartbeat validates the dependencies and options. The idle time counts
-// from the construction.
+// NewHeartbeat validates the dependencies and options.
 func NewHeartbeat(emitter pipeline.MessageEmitter, clk clock.Clock, opts ...HeartbeatOption) (*Heartbeat, error) {
 	if emitter == nil || clk == nil {
 		return nil, fmt.Errorf("%w: nil dependency", ErrInvalidOption)
@@ -75,15 +60,11 @@ func NewHeartbeat(emitter pipeline.MessageEmitter, clk clock.Clock, opts ...Hear
 	return h, nil
 }
 
-// Touch records that a transaction with captured changes was read at at.
-// It never blocks and is safe for concurrent use; earlier times than the
-// latest recorded one are ignored.
 func (h *Heartbeat) Touch(at time.Time) {
 	h.advance(at.UnixNano())
 }
 
-// Run emits heartbeats while the source is idle until ctx ends; it returns
-// nil.
+// Run emits heartbeats while the source is idle until ctx ends.
 func (h *Heartbeat) Run(ctx context.Context) error {
 	for {
 		now := h.clock.Now()

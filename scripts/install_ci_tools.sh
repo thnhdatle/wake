@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Installs the non-Go-pinned tools that make ci needs on a Linux amd64 CI runner.
-# Developer machines install the same tools with Homebrew (CONTRIBUTING.md). Installs into $HOME/.local/bin.
+# Installs the tools that make ci needs on a Linux amd64 CI runner.
 set -euo pipefail
 
 GOLANGCI_LINT_VERSION=v2.14.0

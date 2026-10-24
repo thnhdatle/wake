@@ -6,13 +6,8 @@ import (
 	"bytes"
 )
 
-// maxArrayDepth is Postgres' MAXDIM: arrays have at most six dimensions.
 const maxArrayDepth = 6
 
-// arrayParser converts Postgres array output ("{1,2,NULL}", "{{a,b},{c,d}}",
-// "{\"a,b\",\"c\\\"d\"}", optionally prefixed by "[lo:hi]=" dimension
-// bounds, which are dropped) to nested JSON arrays whose elements are mapped
-// by the element type.
 type arrayParser struct {
 	s       []byte
 	pos     int
@@ -96,8 +91,6 @@ func (p *arrayParser) parseArray(dst []byte, depth int) ([]byte, error) {
 	}
 }
 
-// parseElement converts one quoted or unquoted element; an unquoted NULL
-// (any case) is SQL NULL.
 func (p *arrayParser) parseElement(dst []byte) ([]byte, error) {
 	var (
 		val []byte
@@ -122,8 +115,6 @@ func (p *arrayParser) parseElement(dst []byte) ([]byte, error) {
 	return out, nil
 }
 
-// scanQuoted reads a double-quoted element in which a backslash escapes the
-// next byte. It returns a sub-slice of the input when there is no escape.
 func (p *arrayParser) scanQuoted() ([]byte, bool) {
 	start := p.pos + 1
 	var out []byte
@@ -153,8 +144,6 @@ func (p *arrayParser) scanQuoted() ([]byte, bool) {
 	return nil, false
 }
 
-// scanUnquoted reads an element up to the delimiter or '}', unescaping
-// backslashes and trimming unescaped surrounding white space.
 func (p *arrayParser) scanUnquoted() (val []byte, isNull, ok bool) {
 	start := p.pos
 	escaped := false

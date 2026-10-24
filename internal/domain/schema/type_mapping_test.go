@@ -426,7 +426,6 @@ func TestIsKnownType_Table(t *testing.T) {
 	assert.Equal(t, "oid:16387", schema.FallbackTypeName(16387))
 }
 
-// rng returns the expected JSON of a non-empty range.
 func rng(lower, upper string, lowerInc, upperInc bool) string {
 	return fmt.Sprintf(`{"lower":%s,"upper":%s,"lower_inc":%t,"upper_inc":%t}`, lower, upper, lowerInc, upperInc)
 }

@@ -116,7 +116,7 @@ func fillReleasesLock(s *suite) {
 
 	stale.LockToken = ""
 	assert.False(t, s.fill(b, stale))
-	s.quiet(b, "k") // neither stored nor released: nothing published
+	s.quiet(b, "k")
 }
 
 func setAndInvalidatePublish(s *suite) {
@@ -239,7 +239,7 @@ func epochInitAndBump(s *suite) {
 	require.True(t, ok)
 	assert.Equal(t, e+1, stored)
 
-	h.Delete(t, l2.EpochKey(s.ns)) // evicted: re-initialized from TIME, never going back
+	h.Delete(t, l2.EpochKey(s.ns))
 	e3 := s.epoch(b)
 	assert.Greater(t, e3, e+1)
 	h.Delete(t, l2.EpochKey(s.ns))
@@ -263,7 +263,7 @@ func busDeliversToAll(s *suite) {
 	s.expect(b, l2.Event{Kind: l2.EventEpoch, Epoch: e})
 
 	other := s.backendOn(l2.Config{Namespace: s.ns, Channel: s.cfg.Channel + "-other"})
-	s.quiet(other, key) // a's and b's messages are not on its channel
+	s.quiet(other, key)
 }
 
 func binaryPayloadsAndOddKeys(s *suite) {
@@ -273,8 +273,6 @@ func binaryPayloadsAndOddKeys(s *suite) {
 	for i := range 512 {
 		payload = append(payload, byte(i))
 	}
-	// The empty key is left out: its names carry the empty hash tag "{}",
-	// which Redis Cluster ignores, so they would span several slots.
 	for _, key := range []string{"a|b|c", "{tag}x", "a}b{c", "ключ 🔑", " "} {
 		set := s.set(b, l2.SetRequest{Epoch: 3, Key: key, Payload: payload, TTL: hour, GenTTL: hour})
 		s.expect(b, l2.Event{Kind: l2.EventInvalidate, Epoch: 3, Gen: set.Gen, Key: key})
@@ -298,10 +296,10 @@ func corruptRecordsAreMisses(s *suite) {
 	for _, raw := range []string{
 		"garbage",
 		"1|2",
-		formatValue(r.Gen, 0, "p")[1:],      // generation prefix damaged
-		formatValue(r.Gen-1, future, "old"), // older generation
+		formatValue(r.Gen, 0, "p")[1:],
+		formatValue(r.Gen-1, future, "old"),
 		formatValue(r.Gen, 1, "expired"),
-		formatValue(r.Gen, future, "p")[:len(formatValue(r.Gen, future, "p"))-2] + "x|", // expires_at not a number
+		formatValue(r.Gen, future, "p")[:len(formatValue(r.Gen, future, "p"))-2] + "x|",
 	} {
 		h.RawSet(t, v, raw)
 		got := s.read(b, 1, "k", hour)

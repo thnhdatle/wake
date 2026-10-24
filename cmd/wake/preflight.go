@@ -15,15 +15,12 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Names of the checks the command layer adds to pgsql.RunCheck.
 const (
 	checkStatusInterval = "status_interval"
 	checkNameCollisions = "name_collisions"
 )
 
-// runChecks runs the pre-flight checks (pgsql.RunCheck, with the
-// replication connection as the IDENTIFY_SYSTEM prober) plus the
-// stream.status_interval rule. Used by startup and `wake check`.
+// runChecks runs the pre-flight checks used by startup and `wake check`.
 func runChecks(ctx context.Context, src *source, cfg *config.Config, r pipeline.TableResolver) (pgsql.Report, error) {
 	report, err := pgsql.RunCheck(ctx, src.catalog, src.conn, checkConfig(cfg, r))
 	if err != nil {
@@ -37,8 +34,6 @@ func runChecks(ctx context.Context, src *source, cfg *config.Config, r pipeline.
 	return report, nil
 }
 
-// statusIntervalFinding is the startup rule for stream.status_interval: with wal_sender_timeout > 0,
-// stream.status_interval must be below half of it.
 func statusIntervalFinding(cfg *config.Config, s pipeline.ServerSettings) pgsql.Finding {
 	interval := cfg.Stream.StatusInterval.Std()
 	if err := stream.CheckStatusInterval(interval, s.WALSenderTimeout); err != nil {
@@ -54,8 +49,6 @@ func statusIntervalFinding(cfg *config.Config, s pipeline.ServerSettings) pgsql.
 	}
 }
 
-// findingsError reports failed pre-flight checks; its code is the first
-// failure's.
 type findingsError struct {
 	failed []pgsql.Finding
 }
@@ -71,11 +64,8 @@ func (e *findingsError) Error() string {
 	return "pre-flight checks failed: " + strings.Join(parts, "; ")
 }
 
-// ErrorCode returns the code of the first failed check.
 func (e *findingsError) ErrorCode() string { return e.failed[0].Code }
 
-// judge logs the passed and warning findings of a startup report and
-// returns the failed ones as a findingsError (reported once, by the caller).
 func judge(ctx context.Context, log *slog.Logger, report *pgsql.Report) error {
 	var failed []pgsql.Finding
 	for _, f := range report.Findings {
@@ -97,18 +87,11 @@ func judge(ctx context.Context, log *slog.Logger, report *pgsql.Report) error {
 	return nil
 }
 
-// syncResult is the outcome of the startup publication step.
 type syncResult struct {
-	// publications are the publication_names of START_REPLICATION.
 	publications []string
-	// added are the tables managed mode published at this startup that
-	// were not published before (detected while Wake was stopped).
-	added []string
+	added        []string
 }
 
-// syncPublications creates or alters the managed publications (managed
-// mode) or uses the existing one, before the slot is created or replication
-// starts (pgoutput needs the publication to exist).
 func syncPublications(ctx context.Context, src *source, cfg *config.Config, r pipeline.TableResolver,
 ) (syncResult, error) {
 	if cfg.Source.Publication.Mode == config.PublicationExisting {
@@ -138,7 +121,6 @@ func syncPublications(ctx context.Context, src *source, cfg *config.Config, r pi
 	return out, nil
 }
 
-// syncedNames lists the tables of both managed publications.
 func syncedNames(res *pgsql.SyncResult) []string {
 	out := make([]string, 0, len(res.Keyed)+len(res.Unkeyed))
 	for i := range res.Keyed {
@@ -150,8 +132,6 @@ func syncedNames(res *pgsql.SyncResult) []string {
 	return out
 }
 
-// collisionFinding rejects two captured tables that map to the same
-// "<schema>.<table>": their events would share a topic and a source.
 func collisionFinding(tables []snapshot.Table) pgsql.Finding {
 	seen := make(map[string]string, len(tables))
 	var clashes []string

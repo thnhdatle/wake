@@ -4,11 +4,6 @@ package cache
 
 import "context"
 
-// runMaintenance is the second goroutine started by New and stopped by
-// Close. It sleeps until woken (breaker opened, invalidation
-// deferred, bus lost) and then, every probeInterval until nothing is left
-// to do: probes L2 while the breaker is open (half-open), refreshes the
-// epoch while the bus is down, and replays deferred invalidations.
 func (c *cache[V]) runMaintenance(ctx context.Context) {
 	defer c.wg.Done()
 	for {
@@ -49,7 +44,6 @@ func (c *cache[V]) maintain(ctx context.Context) {
 	case !c.breaker.allow():
 		return
 	case !c.busUp.Load() || !c.epochOK.Load():
-		// Epoch messages may be missed while the bus is down.
 		e, err := c.backend.Epoch(ctx)
 		if err != nil {
 			c.l2Failed(ctx, err)
@@ -61,9 +55,6 @@ func (c *cache[V]) maintain(ctx context.Context) {
 	c.replayPending(ctx)
 }
 
-// replayPending applies deferred invalidations: an epoch increment when the
-// set overflowed, otherwise one invalidation per key. It stops at the first
-// failure and retries on the next round.
 func (c *cache[V]) replayPending(ctx context.Context) {
 	if !c.pending.active.Load() {
 		return

@@ -30,7 +30,6 @@ var (
 	orders = dbTable{oid: 16402, schema: "public", name: "orders"}
 )
 
-// procOpts configures one Wake process.
 type procOpts struct {
 	mode      snapshot.Mode
 	chunkRows int
@@ -39,8 +38,6 @@ type procOpts struct {
 	manualAck bool
 }
 
-// proc is one Wake process wired like cmd/wake will wire it (see the
-// snapshot package documentation), over the fake database.
 type proc struct {
 	plan    *snapshot.Plan
 	keeper  *snapshot.StateKeeper
@@ -127,7 +124,6 @@ func startProc(t *testing.T, db *fakeDB, store *fakestate.Store, o procOpts) *pr
 	return p
 }
 
-// stop cancels the process ("kill") and checks that no component failed.
 func (p *proc) stop(t *testing.T) {
 	t.Helper()
 	p.cancel()
@@ -137,8 +133,6 @@ func (p *proc) stop(t *testing.T) {
 	require.Empty(t, p.errs)
 }
 
-// waitIdle waits until no snapshot is queued or running and every
-// transaction in the WAL is confirmed.
 func (p *proc) waitIdle(t *testing.T, db *fakeDB) {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -147,7 +141,6 @@ func (p *proc) waitIdle(t *testing.T, db *fakeDB) {
 	}, 30*time.Second, time.Millisecond, "pipeline did not settle")
 }
 
-// snapMetrics records snapshot metrics.
 type snapMetrics struct {
 	mu       sync.Mutex
 	rows     map[string]uint64
@@ -186,7 +179,6 @@ func (m *snapMetrics) snapshot() (map[string]uint64, []string, int) {
 	return rows, slices.Clone(m.requests), m.retries
 }
 
-// event is the part of a CDC event the final-state check needs.
 type event struct {
 	id     change.ID
 	table  string
@@ -227,8 +219,6 @@ func parseEvents(t *testing.T, recs []pipeline.Record) []event {
 	return out
 }
 
-// finalState applies the events of a table per key in seq order as upserts
-// (M2): `d` deletes, a `u` whose before key differs deletes it first.
 func finalState(t *testing.T, recs []pipeline.Record, table string) map[int64]string {
 	t.Helper()
 	evs := parseEvents(t, recs)
@@ -255,8 +245,6 @@ func finalState(t *testing.T, recs []pipeline.Record, table string) map[int64]st
 	return state
 }
 
-// writer applies random single-table transactions and mirrors the table's
-// ids so that every operation is valid.
 type writer struct {
 	db    *fakeDB
 	table string
@@ -276,7 +264,6 @@ func newWriter(db *fakeDB, table string, seed uint64) *writer {
 	return w
 }
 
-// step commits one transaction of 1 to 3 random operations.
 func (w *writer) step() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -287,7 +274,6 @@ func (w *writer) step() {
 	w.db.commit(ops...)
 }
 
-// touch commits an update, a key change and a delete of ids in [from, to].
 func (w *writer) touch(from, to int64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -318,7 +304,7 @@ func (w *writer) op() op {
 	case len(w.ids) == 0 || n < 3:
 		id := w.next
 		if len(w.ids) > 0 && w.rng.IntN(2) == 0 {
-			id = w.rng.Int64N(w.next + 1) // may fill a gap below existing ids
+			id = w.rng.Int64N(w.next + 1)
 			if slices.Contains(w.ids, id) {
 				id = w.next
 			}
@@ -345,5 +331,4 @@ func (w *writer) op() op {
 	}
 }
 
-// nonce returns a valid ULID per process number.
 func nonce(n int) string { return "01JABCDEFGHJKMNPQRSTVWXY" + strconv.Itoa(10+n) }

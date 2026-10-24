@@ -9,24 +9,14 @@ import (
 	"strings"
 )
 
-// Snapshot is a Postgres pg_snapshot as returned by pg_current_snapshot():
-// transactions with xid >= Xmax had not completed when the snapshot was
-// taken, and neither had the ones listed in XIP; every other xid had. Values
-// are full 64-bit xids (xid8). The zero Snapshot means "none" (a LOW
-// watermark carries none).
+// Snapshot is a Postgres transaction snapshot.
 type Snapshot struct {
 	Xmin uint64
 	Xmax uint64
-	// XIP lists the in-progress xids in strictly increasing order, all in
-	// [Xmin, Xmax).
-	XIP []uint64
+	XIP  []uint64
 }
 
-// ParseSnapshot parses the pg_snapshot text form "xmin:xmax:xip1,xip2,...".
-// Like Postgres it accepts xip lists with duplicates and drops them, and it
-// requires decimal numbers without signs or leading zeros, xmin and xmax with
-// non-zero low 32 bits, xmin <= xmax, xmax-xmin <= 2^31 (the wraparound
-// horizon), and a non-decreasing xip list inside [xmin, xmax).
+// ParseSnapshot parses the text form of a snapshot.
 func ParseSnapshot(s string) (Snapshot, error) {
 	xminText, rest, ok1 := strings.Cut(s, ":")
 	xmaxText, xipText, ok2 := strings.Cut(rest, ":")
@@ -57,7 +47,6 @@ func ParseSnapshot(s string) (Snapshot, error) {
 	return snap, nil
 }
 
-// parseXID parses a canonical unsigned decimal.
 func parseXID(s string) (uint64, error) {
 	if s == "" || (len(s) > 1 && s[0] == '0') || s[0] < '0' || s[0] > '9' {
 		return 0, ErrInvalidSnapshot
@@ -69,13 +58,10 @@ func parseXID(s string) (uint64, error) {
 	return v, nil
 }
 
-// IsZero reports whether s is the zero Snapshot.
 func (s Snapshot) IsZero() bool {
 	return s.Xmin == 0 && s.Xmax == 0 && len(s.XIP) == 0
 }
 
-// Validate checks the rules ParseSnapshot enforces, with a strictly
-// increasing XIP.
 func (s Snapshot) Validate() error {
 	switch {
 	case uint32(s.Xmin) == 0 || uint32(s.Xmax) == 0: //nolint:gosec // G115: Postgres validity looks at the low half
@@ -93,12 +79,10 @@ func (s Snapshot) Validate() error {
 	return nil
 }
 
-// String returns the pg_snapshot text form.
 func (s Snapshot) String() string {
 	return string(s.AppendText(nil))
 }
 
-// AppendText appends the pg_snapshot text form to dst.
 func (s Snapshot) AppendText(dst []byte) []byte {
 	dst = strconv.AppendUint(dst, s.Xmin, 10)
 	dst = append(dst, ':')
@@ -113,7 +97,6 @@ func (s Snapshot) AppendText(dst []byte) []byte {
 	return dst
 }
 
-// MarshalText implements encoding.TextMarshaler after validating s.
 func (s Snapshot) MarshalText() ([]byte, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
@@ -121,7 +104,6 @@ func (s Snapshot) MarshalText() ([]byte, error) {
 	return s.AppendText(nil), nil
 }
 
-// UnmarshalText implements encoding.TextUnmarshaler with ParseSnapshot.
 func (s *Snapshot) UnmarshalText(b []byte) error {
 	v, err := ParseSnapshot(string(b))
 	if err != nil {
@@ -131,20 +113,11 @@ func (s *Snapshot) UnmarshalText(b []byte) error {
 	return nil
 }
 
-// HasXIP reports whether xip lists the 32-bit xid, matched by low 32 bits
-// (see MatchXID): the transaction was running when the snapshot was taken.
 func (s Snapshot) HasXIP(xid uint32) bool {
 	_, found := slices.BinarySearch(s.XIP, FullXID(xid, s.Xmax))
 	return found
 }
 
-// IsVisible reports whether the effects of xid, a transaction known to have
-// committed, are visible to the snapshot. Postgres' rule (XidInMVCCSnapshot)
-// makes a committed xid invisible when it is listed in xip or when it is >=
-// xmax. The second case matters: a transaction can write its commit record
-// before another one's and still get an xid at or above the snapshot's xmax
-// when it is the last to leave the proc array, so it is invisible without
-// being listed in xip. The xid is widened against xmax (FullXID).
 func (s Snapshot) IsVisible(xid uint32) bool {
 	full := FullXID(xid, s.Xmax)
 	if full >= s.Xmax {

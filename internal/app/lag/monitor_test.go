@@ -113,7 +113,6 @@ func TestNewMonitor_Defaults(t *testing.T) {
 	assert.Equal(t, DefaultInterval, m.interval)
 	assert.Equal(t, []float64{DefaultWarnBytes, DefaultCriticalBytes, DefaultMaxAckAge.Seconds(), 0},
 		[]float64{m.rules[0].threshold, m.rules[1].threshold, m.rules[2].threshold, m.rules[3].threshold})
-	// Without a notifier, changes are only exported.
 	m.Poll(context.Background())
 }
 
@@ -357,11 +356,6 @@ func TestMonitor_Run_PollsAtStartAndStopsOnCancel(t *testing.T) {
 	assert.Equal(t, 0, e.clk.Waiters(), "the ticker is stopped")
 }
 
-// TestMonitor_Run_AlertWithinOneInterval mirrors the sink outage acceptance
-// test (lag.interval
-// 5s, warn 8 MiB): the slot lag crosses warn at T between two polls, and the
-// alert is posted at the next poll, within one interval of T and well
-// within the 60 s budget, even if the first delivery fails.
 func TestMonitor_Run_AlertWithinOneInterval(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

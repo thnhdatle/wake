@@ -12,12 +12,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// The methods in this file implement pipeline.TxObserver; the stream reader
-// calls them from its goroutine.
-
 var _ pipeline.TxObserver = (*Snapshotter)(nil)
 
-// ObserveBegin implements pipeline.TxObserver.
 func (s *Snapshotter) ObserveBegin(tx pipeline.ObservedTx) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -27,7 +23,6 @@ func (s *Snapshotter) ObserveBegin(tx pipeline.ObservedTx) {
 	}
 }
 
-// ObserveChange implements pipeline.TxObserver.
 func (s *Snapshotter) ObserveChange(table string, key, beforeKey []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -41,7 +36,6 @@ func (s *Snapshotter) ObserveChange(table string, key, beforeKey []byte) {
 	s.mergerErr(context.Background(), s.active.merger.Touch(key))
 }
 
-// ObserveTruncate implements pipeline.TxObserver.
 func (s *Snapshotter) ObserveTruncate(table string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -50,7 +44,6 @@ func (s *Snapshotter) ObserveTruncate(table string) {
 	}
 }
 
-// ObserveMessage implements pipeline.TxObserver.
 func (s *Snapshotter) ObserveMessage(prefix string, content []byte) {
 	switch prefix {
 	case pgoutput.PrefixSnapshot:
@@ -76,7 +69,7 @@ func (s *Snapshotter) observeTrigger(content []byte) {
 func (s *Snapshotter) observeWatermark(content []byte) {
 	p, err := watermark.ParsePayload(content)
 	if err != nil || !p.IsOwn(s.cfg.Nonce) {
-		return // another process' watermark, left by a crash, or not ours to parse
+		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -92,9 +85,6 @@ func (s *Snapshotter) observeWatermark(content []byte) {
 	s.txHigh = &highResult{chunk: p.Chunk, out: out, err: err, tx: s.tx}
 }
 
-// ObserveCommit implements pipeline.TxObserver: it closes the transaction
-// in the merger, installs a pending table, queues snapshot requests and
-// decides whether to hold a HIGH transaction open.
 func (s *Snapshotter) ObserveCommit(ctx context.Context) (bool, error) {
 	s.mu.Lock()
 	if s.active != nil {
@@ -127,8 +117,6 @@ func (s *Snapshotter) ObserveCommit(ctx context.Context) (bool, error) {
 	return hold, nil
 }
 
-// ObserveHeld implements pipeline.TxObserver: it routes the chunk's kept
-// rows into the HIGH transaction as one completion group and seals both.
 func (s *Snapshotter) ObserveHeld(ctx context.Context, tx pipeline.HeldTx) error {
 	s.mu.Lock()
 	h, a := s.held, s.active
@@ -158,9 +146,6 @@ func (s *Snapshotter) ObserveHeld(ctx context.Context, tx pipeline.HeldTx) error
 	return nil
 }
 
-// mergerErr logs a merger call out of sequence. It cannot happen while the
-// reader observes transactions in order; the chunk then fails at HIGH and
-// is re-run.
 func (s *Snapshotter) mergerErr(ctx context.Context, err error) {
 	if err != nil {
 		s.logger.LogAttrs(ctx, slog.LevelError, "watermark merger out of sequence",

@@ -21,9 +21,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache"
 )
 
-// fakeSource delivers scripted batches like a broker: a batch is
-// acknowledged only when the handler returns nil, and Consume stops at the
-// first handler error, leaving that batch unacknowledged.
 type fakeSource struct {
 	batches [][][]byte
 	check   error
@@ -53,7 +50,6 @@ func (s *fakeSource) ackedCount() int {
 	return len(s.acked)
 }
 
-// failingSource fails at once.
 type failingSource struct{ err error }
 
 func (s failingSource) Consume(context.Context, Handler) error { return s.err }
@@ -88,7 +84,6 @@ func newHarness(t *testing.T, del *fakeDeleter, batches [][][]byte, opts ...Opti
 	return h
 }
 
-// run runs the invalidator until the returned stop function is called.
 func (h *harness) run(t *testing.T) (stop func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
@@ -105,7 +100,6 @@ func (h *harness) counter(t *testing.T, name string, labels map[string]string) f
 	return counterValue(t, h.reg, name, labels)
 }
 
-// syncWriter serializes writes to a buffer shared with the test.
 type syncWriter struct {
 	mu sync.Mutex
 	w  *bytes.Buffer
@@ -170,16 +164,16 @@ func TestInvalidator_Run_SkipRules(t *testing.T) {
 
 	snapshot := evt("r", "public.users", `{"id":5}`, "null", `{"id":5,"email":"s@example.com"}`)
 	batch := [][]byte{
-		nil,         // Kafka tombstone
-		{},          // empty value, same
-		[]byte("{"), // invalid JSON
-		evt("x", "public.users", `{"id":1}`, "null", `{"id":1}`), // unknown op
-		evt("t", "public.users", "null", "null", "null"),         // truncate
-		snapshot, // snapshot read
-		evt("c", "public.orders", `{"id":1}`, "null", `{"id":1}`),      // unmapped table
-		evt("c", "public.users", `{"id":null}`, "null", `{"id":null}`), // nothing renders
+		nil,
+		{},
+		[]byte("{"),
+		evt("x", "public.users", `{"id":1}`, "null", `{"id":1}`),
+		evt("t", "public.users", "null", "null", "null"),
+		snapshot,
+		evt("c", "public.orders", `{"id":1}`, "null", `{"id":1}`),
+		evt("c", "public.users", `{"id":null}`, "null", `{"id":null}`),
 		evt("c", "public.users", `{"id":7}`, "null", `{"id":7,"email":"a@example.com"}`),
-		evt("c", "public.users", `{"id":7}`, "null", `{"id":7,"email":"a@example.com"}`), // same keys again
+		evt("c", "public.users", `{"id":7}`, "null", `{"id":7,"email":"a@example.com"}`),
 	}
 	tests := []struct {
 		name       string
@@ -246,10 +240,6 @@ func TestInvalidator_Run_ChunksLargeBatches(t *testing.T) {
 	assert.Len(t, h.del.deleted(), 2*maxKeysPerDelete)
 }
 
-// TestInvalidator_Run_RetriesUntilDeleteSucceeds checks commit-after-delete:
-// while Delete fails (ErrDeferred or another error) the batch is retried
-// with growing delays and never acknowledged; it is acknowledged right
-// after the first nil.
 func TestInvalidator_Run_RetriesUntilDeleteSucceeds(t *testing.T) {
 	t.Parallel()
 	deferred := fmt.Errorf("delete user:1: %w", cache.ErrDeferred)
@@ -262,7 +252,6 @@ func TestInvalidator_Run_RetriesUntilDeleteSucceeds(t *testing.T) {
 	for attempt := 1; attempt <= 3; attempt++ {
 		<-del.called
 		assert.Zero(t, h.src.ackedCount(), "not acknowledged after failed attempt %d", attempt)
-		// The retry waits on the fake clock: nothing happens until it moves.
 		eventually(t, func() bool { return h.clk.Waiters() == 1 })
 		h.clk.Advance(150 * time.Millisecond)
 	}
@@ -324,11 +313,8 @@ func TestInvalidator_Backoff(t *testing.T) {
 func TestInvalidator_FullIdentityDetection(t *testing.T) {
 	t.Parallel()
 	batch := [][]byte{
-		// Full before image: fine.
 		evt("u", "public.users", `{"id":1}`, `{"id":1,"email":"a"}`, `{"id":1,"email":"b"}`),
-		// Inserts never raise it.
 		evt("c", "public.users", `{"id":2}`, "null", `{"id":2,"email":"c"}`),
-		// Default identity: before carries the key only.
 		evt("u", "public.users", `{"id":3}`, `{"id":3}`, `{"id":3,"email":"d"}`),
 		evt("d", "public.users", `{"id":4}`, `{"id":4}`, "null"),
 	}

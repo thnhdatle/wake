@@ -9,40 +9,26 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// Decoder parses messages of one replication stream and keeps the relation
-// cache (by relation OID) and the type cache that Relation and Type messages
-// maintain. It is not safe for concurrent use; one stream has one Decoder.
+// Decoder decodes messages and remembers the relations it has seen.
 type Decoder struct {
 	relations map[uint32]*relationEntry
 	types     map[uint32]TypeMessage
-	// cells is RowImages' reusable scratch for converted tuple values.
-	cells []cell
+	cells     []cell
 }
 
-// relationEntry is a cached relation with its precomputed column indexes.
 type relationEntry struct {
-	rel schema.Relation
-	// override is the caller's key column list (SetKeyColumns), applied
-	// under REPLICA IDENTITY FULL only.
+	rel      schema.Relation
 	override []string
-	// identity holds the indexes of the flagged replica identity columns;
-	// key the indexes of the CDC event key columns.
 	identity []int
 	key      []int
 }
 
-// NewDecoder returns a Decoder with empty caches.
+// NewDecoder returns a decoder with no known relations.
 func NewDecoder() *Decoder {
 	return &Decoder{relations: make(map[uint32]*relationEntry), types: make(map[uint32]TypeMessage)}
 }
 
-// Decode parses one message like Parse and applies it to the caches: a Type
-// message is remembered for naming the columns of later relations; a
-// Relation message gets its column TypeName resolved (built-in name, Type
-// message name qualified by its schema unless it is "public" or pg_catalog,
-// or schema.FallbackTypeName) and replaces the cached relation. A key
-// column override survives a new Relation message only while every named
-// column still exists.
+// Decode decodes one message and records relations.
 func (d *Decoder) Decode(data []byte) (Message, error) {
 	m, err := Parse(data)
 	if err != nil {
@@ -113,8 +99,6 @@ func (e *relationEntry) keyless() bool {
 	return e.rel.Identity == schema.IdentityNothing || len(e.key) == 0
 }
 
-// Relation returns the cached relation. Its Columns slice is shared with
-// the cache and must not be modified.
 func (d *Decoder) Relation(oid uint32) (schema.Relation, bool) {
 	e, ok := d.relations[oid]
 	if !ok {
@@ -123,11 +107,6 @@ func (d *Decoder) Relation(oid uint32) (schema.Relation, bool) {
 	return e.rel, true
 }
 
-// SetKeyColumns sets the CDC event key columns of a relation from the catalog (its
-// primary key, in key order). It matters under REPLICA IDENTITY FULL, where
-// the Relation message flags every column and cannot tell the primary key;
-// under other identities the flagged columns are the key and the override
-// is kept but not applied. Empty names clears the override.
 func (d *Decoder) SetKeyColumns(oid uint32, names []string) error {
 	e, ok := d.relations[oid]
 	if !ok {
@@ -146,9 +125,6 @@ func (d *Decoder) SetKeyColumns(oid uint32, names []string) error {
 	return nil
 }
 
-// KeyColumns returns the names of the CDC event key columns of a relation: the
-// override under REPLICA IDENTITY FULL when set, otherwise the flagged
-// replica identity columns; nil for a keyless relation.
 func (d *Decoder) KeyColumns(oid uint32) ([]string, bool) {
 	e, ok := d.relations[oid]
 	if !ok {

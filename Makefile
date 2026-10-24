@@ -6,8 +6,6 @@ SHELL := /usr/bin/env bash
 PG         ?= 17
 FUZZTIME   ?= 30s
 IMAGE      ?= thnhdatle/wake:dev
-# Release version shown in the acceptance report and the benchmark results.
-RELEASE    ?= v0.1.0
 COMPOSE    := docker compose -f deploy/docker-compose.yml
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -25,7 +23,7 @@ define step
 if $(2); then echo "PASS  $(1)"; else echo "FAIL  $(1)" >&2; exit 1; fi
 endef
 
-.PHONY: bootstrap generate fmt lint test test-integration coverage mutation acceptance bench fuzz \
+.PHONY: bootstrap generate fmt lint test test-integration coverage fuzz \
 	examples quickstart-test security build docker up down ci release-check release-dry
 
 bootstrap:
@@ -50,15 +48,6 @@ test-integration:
 
 coverage:
 	@$(call step,coverage,PG=$(PG) scripts/coverage.sh)
-
-mutation:
-	@$(call step,mutation,scripts/mutation.sh)
-
-acceptance:
-	@$(call step,acceptance,go run ./acceptance/cmd/runner -version $(RELEASE))
-
-bench:
-	@$(call step,bench,RELEASE=$(RELEASE) scripts/bench.sh)
 
 fuzz:
 	@$(call step,fuzz,FUZZTIME=$(FUZZTIME) scripts/fuzz.sh)

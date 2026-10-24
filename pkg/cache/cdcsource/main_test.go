@@ -16,12 +16,8 @@ import (
 	"go.uber.org/goleak"
 )
 
-// TestMain fails the package when a goroutine (keep-in-progress ticker,
-// client) outlives Consume or Run.
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
-// evt builds a CDC event payload; key, before and after are raw JSON
-// (use "null" for none).
 func evt(op, table, key, before, after string) []byte {
 	schema, name, _ := splitTable(table)
 	tx := `,"tx_id":7`
@@ -34,13 +30,11 @@ func evt(op, table, key, before, after string) []byte {
 		id, schema, name, op, tx, key, before, after)
 }
 
-// fakeDeleter records Delete calls and returns scripted errors first.
 type fakeDeleter struct {
-	mu    sync.Mutex
-	errs  []error
-	calls [][]string
-	keys  []string // keys of successful calls
-	// called is signaled (non-blocking) after every call.
+	mu     sync.Mutex
+	errs   []error
+	calls  [][]string
+	keys   []string
 	called chan struct{}
 }
 
@@ -79,7 +73,6 @@ func (d *fakeDeleter) callCount() int {
 	return len(d.calls)
 }
 
-// counterValue returns the value of the counter name with labels in g.
 func counterValue(t *testing.T, g prometheus.Gatherer, name string, labels map[string]string) float64 {
 	t.Helper()
 	mfs, err := g.Gather()
@@ -109,7 +102,6 @@ func labelsMatch(m *dto.Metric, want map[string]string) bool {
 	return n == len(want)
 }
 
-// eventually polls cond every millisecond until it holds, for at most 10 s.
 func eventually(tb testing.TB, cond func() bool) {
 	tb.Helper()
 	deadline := time.Now().Add(10 * time.Second)

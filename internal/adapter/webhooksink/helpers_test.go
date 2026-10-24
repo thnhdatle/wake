@@ -32,16 +32,13 @@ func TestMain(m *testing.M) {
 }
 
 const (
-	testSecret = "whsec_test"
-	secretEnv  = "WAKE_TEST_WEBHOOK_SECRET"
-	// waitTimeout bounds every wait of a test on real time; it is a safety
-	// net only, the tests synchronize on channels and the fake clock.
+	testSecret  = "whsec_test"
+	secretEnv   = "WAKE_TEST_WEBHOOK_SECRET"
 	waitTimeout = 20 * time.Second
 )
 
 var epoch = time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 
-// tb is what the helpers need from *testing.T and *rapid.T.
 type tb interface {
 	require.TestingT
 	Cleanup(f func())
@@ -65,17 +62,15 @@ func baseConfig(url string) config.Sink {
 	}
 }
 
-// action tells the receiver how to answer one request.
 type action struct {
-	status     int             // default 200
-	reset      bool            // reset the TCP connection without answering
-	hang       bool            // never answer; the client times out
-	wait       <-chan struct{} // answer once closed
-	delay      time.Duration   // answer after this real delay (slow response)
+	status     int
+	reset      bool
+	hang       bool
+	wait       <-chan struct{}
+	delay      time.Duration
 	retryAfter string
 }
 
-// received is one request seen by the receiver.
 type received struct {
 	n           int
 	id          string
@@ -85,7 +80,6 @@ type received struct {
 	sigErr      error
 }
 
-// items decodes the body's JSON array.
 func (r *received) items(t require.TestingT) []item {
 	var out []item
 	require.NoError(t, json.Unmarshal(r.body, &out))
@@ -99,17 +93,16 @@ type item struct {
 	N    uint64 `json:"n"`
 }
 
-// receiver is an in-test webhook endpoint injecting failures.
 type receiver struct {
 	srv    *httptest.Server
 	clk    clock.Clock
 	decide func(n int, r *received) action
 
-	mu       sync.Mutex // protects all and accepted
+	mu       sync.Mutex
 	all      []*received
-	accepted []*received // answered 2xx, in answer order
+	accepted []*received
 
-	reqs chan *received // every request, never blocks (large buffer)
+	reqs chan *received
 }
 
 func newReceiver(t tb, clk clock.Clock, decide func(n int, r *received) action) *receiver {
@@ -160,7 +153,6 @@ func (rv *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(status)
 }
 
-// await applies the blocking parts of act; false means the client is gone.
 func (rv *receiver) await(ctx context.Context, act action) bool {
 	if act.hang {
 		<-ctx.Done()
@@ -193,14 +185,13 @@ func resetConn(w http.ResponseWriter) {
 		return
 	}
 	if tc, ok := conn.(*net.TCPConn); ok {
-		_ = tc.SetLinger(0) // close with RST
+		_ = tc.SetLinger(0)
 	}
 	_ = conn.Close()
 }
 
 func (rv *receiver) url() string { return rv.srv.URL }
 
-// next returns the next request.
 func (rv *receiver) next(t require.TestingT) *received {
 	select {
 	case r := <-rv.reqs:
@@ -211,7 +202,6 @@ func (rv *receiver) next(t require.TestingT) *received {
 	}
 }
 
-// noRequest asserts that no request is pending in the channel right now.
 func (rv *receiver) noRequest(t require.TestingT) {
 	select {
 	case r := <-rv.reqs:
@@ -232,9 +222,8 @@ func (rv *receiver) allRequests() []*received {
 	return append([]*received(nil), rv.all...)
 }
 
-// acker records acknowledgements by token.
 type acker struct {
-	mu      sync.Mutex // protects every field
+	mu      sync.Mutex
 	acked   map[uint64]int
 	order   []uint64
 	changed chan struct{}
@@ -273,7 +262,6 @@ func (a *acker) duplicates() int {
 	return d
 }
 
-// waitAcks waits until at least n acknowledgements arrived.
 func (a *acker) waitAcks(t require.TestingT, n int) {
 	deadline := time.After(waitTimeout)
 	for {
@@ -313,7 +301,6 @@ func barrierRec(a pipeline.Acker, seq uint64) pipeline.Record {
 	}
 }
 
-// newSink builds a sink with the fake clock and a fixed jitter seed.
 func newSink(t tb, cfg config.Sink, clk clock.Clock, opts ...webhooksink.Option) *webhooksink.Sink {
 	opts = append([]webhooksink.Option{webhooksink.WithRand(seeded(1))}, opts...)
 	s, err := webhooksink.New(cfg, getenv, clk, testutil.DiscardLogger(), opts...)
@@ -321,7 +308,6 @@ func newSink(t tb, cfg config.Sink, clk clock.Clock, opts ...webhooksink.Option)
 	return s
 }
 
-// start runs s until the test ends.
 func start(t tb, s *webhooksink.Sink) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -332,8 +318,6 @@ func start(t tb, s *webhooksink.Sink) {
 	})
 }
 
-// autoAdvance fires every timer of clk as soon as one is armed, by step, so
-// backoff and linger waits pass without real sleeping.
 func autoAdvance(t tb, clk *clock.Fake, step time.Duration) {
 	stop, done := make(chan struct{}), make(chan struct{})
 	go func() {
@@ -357,8 +341,6 @@ func autoAdvance(t tb, clk *clock.Fake, step time.Duration) {
 	})
 }
 
-// waitTimer waits until clk has exactly one pending timer: the sink is
-// backing off.
 func waitTimer(t require.TestingT, clk *clock.Fake) {
 	deadline := time.After(waitTimeout)
 	for {
@@ -374,7 +356,6 @@ func waitTimer(t require.TestingT, clk *clock.Fake) {
 	}
 }
 
-// waitHealth waits until the sink reports state.
 func waitHealth(t require.TestingT, s *webhooksink.Sink, state pipeline.SinkState) pipeline.SinkHealth {
 	deadline := time.After(waitTimeout)
 	tick := time.NewTicker(time.Millisecond)
@@ -399,9 +380,8 @@ func send(t require.TestingT, s *webhooksink.Sink, recs ...pipeline.Record) {
 
 func seeded(n uint64) *rand.Rand { return rand.New(rand.NewPCG(n, n)) }
 
-// recorder is an Observer and AckObserver that keeps every call.
 type recorder struct {
-	mu           sync.Mutex // protects every field
+	mu           sync.Mutex
 	sent         int
 	acked        int
 	retries      map[string]int

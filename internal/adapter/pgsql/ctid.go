@@ -14,27 +14,12 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// ctid pagination (tables without primary key or identity index: FULL
-// without key and keyless tables). Rows are read leaf by leaf (one leaf for
-// a plain table, the leaf partitions in OID order for a partitioned table)
-// in page ranges sized from the planner statistics, so that each query is a
-// TID range scan over a bounded number of pages. A rewrite of the table
-// between two chunk transactions (VACUUM FULL, CLUSTER, a rewriting ALTER
-// TABLE) moves rows to other ctids, so a table snapshot can then skip or
-// repeat rows (a documented snapshot limit). Inside one
-// exported-snapshot session the reads hold an ACCESS SHARE lock, which
-// blocks such rewrites until the session ends.
-
 const (
-	tidOID = 27
-	// defaultRowsPerPage is assumed when the table was never analyzed.
+	tidOID             = 27
 	defaultRowsPerPage = 50
-	// maxRangePages bounds one range query.
-	maxRangePages = 1 << 20
+	maxRangePages      = 1 << 20
 )
 
-// leaf is a table whose heap holds rows: the table itself or a leaf
-// partition.
 type leaf struct {
 	oid       uint32
 	schema    string
@@ -79,8 +64,6 @@ func loadLeaves(ctx context.Context, tx pgx.Tx, m *tableMeta) ([]leaf, error) {
 	return out, nil
 }
 
-// rangePages is the page span of one range query: enough pages for want
-// rows at the estimated density.
 func rangePages(l *leaf, want int) uint32 {
 	perPage := float64(defaultRowsPerPage)
 	if l.relpages > 0 && l.reltuples > 0 {
@@ -90,7 +73,6 @@ func rangePages(l *leaf, want int) uint32 {
 	return uint32(min(pages, maxRangePages))
 }
 
-// ctidSQL builds the range query of one leaf.
 func ctidSQL(m *tableMeta, l *leaf) string {
 	var b strings.Builder
 	b.WriteString("SELECT ctid, ")
@@ -101,20 +83,17 @@ func ctidSQL(m *tableMeta, l *leaf) string {
 	return b.String()
 }
 
-// ctidReader accumulates the rows of one ctid chunk.
 type ctidReader struct {
-	tx    pgx.Tx
-	meta  *tableMeta
-	rend  *renderer
-	limit int
-	chunk pipeline.Chunk
-	// read counts rows read including the one beyond limit.
+	tx      pgx.Tx
+	meta    *tableMeta
+	rend    *renderer
+	limit   int
+	chunk   pipeline.Chunk
 	read    int
 	lastRel uint32
 	lastTID tid
 }
 
-// readCTID reads up to req.Limit rows after the position in ctid order.
 func readCTID(ctx context.Context, tx pgx.Tx, m *tableMeta, req *pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	var startRel uint32
 	var from tid
@@ -159,9 +138,6 @@ func readCTID(ctx context.Context, tx pgx.Tx, m *tableMeta, req *pipeline.ChunkR
 	return cr.chunk, nil
 }
 
-// readLeaf reads the leaf's ranges from cur until the chunk is full (one
-// row beyond the limit read) or the leaf ends; it reports whether the chunk
-// is full.
 func (cr *ctidReader) readLeaf(ctx context.Context, l *leaf, cur tid) (bool, error) {
 	sql := ctidSQL(cr.meta, l)
 	for int64(cur.page) < l.blocks {
@@ -191,8 +167,6 @@ func (cr *ctidReader) readLeaf(ctx context.Context, l *leaf, cur tid) (bool, err
 	return false, nil
 }
 
-// add renders one result row (ctid first) unless it is the row beyond the
-// limit.
 func (cr *ctidReader) add(rel uint32, values [][]byte) error {
 	if cr.read++; cr.read > cr.limit {
 		return nil

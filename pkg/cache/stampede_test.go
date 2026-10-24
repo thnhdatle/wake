@@ -13,11 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCache_GetOrLoad_Stampede is the unit-level stampede scenario: 1,000
-// concurrent GetOrLoad calls over 3 instances sharing one L2 on a key that
-// just expired; the loader (shorter than lock_timeout) runs exactly once.
-// The loader blocks until the other two instances wait on the lock, so the
-// test exercises the distributed lock and not just lucky timing.
 func TestCache_GetOrLoad_Stampede(t *testing.T) {
 	t.Parallel()
 	const callers = 1000
@@ -30,7 +25,7 @@ func TestCache_GetOrLoad_Stampede(t *testing.T) {
 		require.NoError(t, err)
 	}
 	e.idle()
-	e.clk.Advance(time.Second) // just expired, in L1 and L2
+	e.clk.Advance(time.Second)
 
 	var calls atomic.Int32
 	load := LoadFunc[int](func(context.Context) (int, error) {

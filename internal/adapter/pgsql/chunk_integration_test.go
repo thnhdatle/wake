@@ -107,8 +107,6 @@ func TestChunkReader_ReadChunk_CommittedXIPReportsCommitInvisibleToChunk(t *test
 	db.Exec(t, `CREATE TABLE items (id int PRIMARY KEY); INSERT INTO items VALUES (1), (2)`)
 	reader := newReader(t, newPool(t, db.DSN))
 
-	// T holds an ACCESS EXCLUSIVE lock, so the chunk SELECT waits after
-	// pg_current_snapshot() listed T in xip; T commits while it waits.
 	writer := db.Conn(t)
 	tx, err := writer.Begin(ctx)
 	require.NoError(t, err)
@@ -116,8 +114,6 @@ func TestChunkReader_ReadChunk_CommittedXIPReportsCommitInvisibleToChunk(t *test
 	require.NoError(t, tx.QueryRow(ctx, `SELECT pg_current_xact_id()::text`).Scan(&xid))
 	_, err = tx.Exec(ctx, `LOCK TABLE items IN ACCESS EXCLUSIVE MODE; INSERT INTO items VALUES (3)`)
 	require.NoError(t, err)
-	// A later transaction completes, so that xmax passes T's xid and T is
-	// listed in xip (a running xid at or above xmax is not listed).
 	db.Exec(t, `SELECT pg_current_xact_id()`)
 
 	type result struct {
@@ -143,8 +139,6 @@ func TestChunkReader_ReadChunk_CommittedXIPReportsCommitInvisibleToChunk(t *test
 	x, err := strconv.ParseUint(xid, 10, 64)
 	require.NoError(t, err)
 	assert.Contains(t, res.c.Snapshot.XIP, x)
-	// Transactions of concurrently running tests (other databases share
-	// the xid space) may be listed too.
 	assert.Contains(t, res.c.CommittedXIP, x)
 	require.Len(t, res.c.Rows, 2, "the committed insert is invisible to the chunk's snapshot")
 	assert.True(t, res.c.Done)
@@ -295,7 +289,6 @@ func TestChunkReader_OpenExported_ReadsTheExportedSnapshot(t *testing.T) {
 	rows, _ = readAll(t, read, "public", "nokey", 2)
 	assert.Len(t, rows, 5)
 
-	// The session holds the pool's only connection.
 	short, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 	_, err = reader.ReadChunk(short, pipeline.ChunkRequest{Schema: "public", Table: "items", Limit: 1})
@@ -317,7 +310,6 @@ func TestChunkReader_OpenExported_ReadsTheExportedSnapshot(t *testing.T) {
 	require.NoError(t, err, "a failed import releases its connection")
 }
 
-// typesDDL is the type matrix of scripts/record_pgoutput.sh.
 const typesDDL = `
 CREATE SCHEMA rec;
 CREATE TYPE rec.mood AS ENUM ('sad', 'ok', 'happy');
@@ -353,8 +345,6 @@ INSERT INTO rec.types (id) VALUES (2);
 INSERT INTO rec.types (id, c_timestamptz, c_date, c_interval, c_float8) VALUES
   (3, 'infinity', '-infinity', '-00:00:01', '-Infinity');`
 
-// typesRow1 is the after image of row 1 in
-// internal/app/stream/testdata/golden/reader/types.hex.default.golden.
 const typesRow1 = `{"id":1,"c_int2":-32768,"c_int4":2147483647,"c_int8":9223372036854775807,"c_oid":4294967295,` +
 	`"c_numeric":"1234567890123456.1234","c_numeric_nan":"NaN","c_float4":"Infinity","c_float8":-1.5e-300,` +
 	`"c_bool":true,"c_text":"he said \"hi\" <&> é ☃","c_varchar":"varchar","c_bpchar":"ab   ","c_name":"pg_name",` +

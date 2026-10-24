@@ -4,7 +4,6 @@ package schema
 
 import "strconv"
 
-// valueKind selects the conversion applied to a value's text form.
 type valueKind uint8
 
 const (
@@ -25,9 +24,6 @@ const (
 	kindMultirange
 )
 
-// typeInfo describes one built-in type of the mapping table. elem is the
-// element type of arrays, ranges (bound type) and multiranges (range type);
-// delim is the array element delimiter (pg_type.typdelim of the element).
 type typeInfo struct {
 	name  string
 	kind  valueKind
@@ -41,7 +37,6 @@ func arrayOf(name string, elem uint32) typeInfo {
 	return typeInfo{name: name, kind: kindArray, elem: elem, delim: ','}
 }
 
-// builtinTypes is the constant mapping table (see the package documentation).
 var builtinTypes = map[uint32]typeInfo{
 	OIDInt2: scalar("int2", kindInt), OIDInt4: scalar("int4", kindInt), OIDInt8: scalar("int8", kindInt),
 	OIDOID: scalar("oid", kindInt), OIDXID: scalar("xid", kindInt), OIDCID: scalar("cid", kindInt),
@@ -139,31 +134,20 @@ var builtinTypes = map[uint32]typeInfo{
 	OIDMoneyArray: arrayOf("money[]", OIDMoney),
 }
 
-// IsKnownType reports whether typeOID is in the mapping table. Values of
-// other types are emitted as JSON strings of their text representation; the
-// caller counts a warning once per such type.
 func IsKnownType(typeOID uint32) bool {
 	_, ok := builtinTypes[typeOID]
 	return ok
 }
 
-// TypeName returns the name of a built-in type in the mapping table as used
-// in schema-change events: pg_type.typname for scalars ("int8", "varchar",
-// "timestamptz"), "<element>[]" for arrays ("text[]"). Type modifiers are not
-// included.
 func TypeName(typeOID uint32) (string, bool) {
 	info, ok := builtinTypes[typeOID]
 	return info.name, ok
 }
 
-// FallbackTypeName is the type name used for a type that is neither built in
-// nor described by a pgoutput Type message: "oid:<decimal oid>".
 func FallbackTypeName(typeOID uint32) string {
 	return "oid:" + strconv.FormatUint(uint64(typeOID), 10)
 }
 
-// ElementType returns the element type of a built-in array type, the bound
-// type of a built-in range type or the range type of a built-in multirange.
 func ElementType(typeOID uint32) (uint32, bool) {
 	info, ok := builtinTypes[typeOID]
 	if !ok || info.elem == 0 {

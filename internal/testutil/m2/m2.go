@@ -13,26 +13,18 @@ import (
 	"github.com/thnhdatle/wake/pkg/event"
 )
 
-// Table maps the canonical key JSON of each row to its image.
 type Table map[string]event.Row
 
-// State maps "<schema>.<table>" (the events' source names) to the table.
 type State map[string]Table
 
-// Stats counts what Add saw.
 type Stats struct {
-	// Events are the data events kept for replay (after deduplication).
-	Events int
-	// Duplicates are data events whose id was already added.
+	Events     int
 	Duplicates int
-	// Tombstones are Kafka tombstones (empty values), skipped.
 	Tombstones int
-	// Other are schema-change events and forwarded messages, skipped.
-	Other int
+	Other      int
 }
 
-// Replayer collects payloads and computes the M2 final state. The zero value
-// is ready to use; it is not safe for concurrent use.
+// Replayer collects payloads and computes the final state.
 type Replayer struct {
 	events []entry
 	seen   map[string]bool
@@ -44,10 +36,6 @@ type entry struct {
 	ev  *event.Event
 }
 
-// Add decodes one transport payload (a Kafka record value, a NATS message
-// data or one element of a webhook array). Tombstones, schema changes and
-// messages are counted and skipped; a payload that is not a valid CDC event is an
-// error.
 func (r *Replayer) Add(value []byte) error {
 	if event.IsKafkaTombstone(value) {
 		r.stats.Tombstones++
@@ -82,11 +70,8 @@ func (r *Replayer) Add(value []byte) error {
 	return nil
 }
 
-// Stats returns the counters of the payloads added so far.
 func (r *Replayer) Stats() Stats { return r.stats }
 
-// State applies the collected events per key in seq order (M2) and returns
-// the final state. It may be called again after more Adds.
 func (r *Replayer) State() (State, error) {
 	evs := slices.Clone(r.events)
 	slices.SortStableFunc(evs, func(a, b entry) int { return event.Compare(a.seq, b.seq) })
@@ -106,7 +91,6 @@ func (r *Replayer) State() (State, error) {
 	return st, nil
 }
 
-// errNoKey reports an update or delete without a key.
 var errNoKey = errors.New("update or delete without key")
 
 func apply(t Table, e *event.Event) error {
@@ -138,15 +122,12 @@ func apply(t Table, e *event.Event) error {
 	case event.OpDelete:
 		delete(t, key)
 	case event.OpTruncate:
-		clear(t) // handled above; kept for exhaustiveness
+		clear(t)
 	default:
-		// Unknown ops are ignored, as consumers must (CDC event contract).
 	}
 	return nil
 }
 
-// rowKey is the canonical key of the event's row; events without a key
-// (keyless tables) are keyed by their id.
 func rowKey(e *event.Event) (string, error) {
 	if e.Key == nil {
 		if e.Op == event.OpUpdate || e.Op == event.OpDelete {
@@ -157,8 +138,6 @@ func rowKey(e *event.Event) (string, error) {
 	return CanonicalKey(e.Key)
 }
 
-// beforeKey is the canonical key of the before image restricted to the key
-// columns.
 func beforeKey(e *event.Event) (string, error) {
 	k := make(event.Row, len(e.Key))
 	for col := range e.Key {
@@ -182,8 +161,6 @@ func cloneRow(r event.Row) event.Row {
 	return out
 }
 
-// CanonicalKey renders a key (or any row) as canonical JSON: object keys
-// sorted, values compacted, so equal keys compare equal as strings.
 func CanonicalKey(row event.Row) (string, error) {
 	cols := make([]string, 0, len(row))
 	for c := range row {
@@ -210,8 +187,7 @@ func CanonicalKey(row event.Row) (string, error) {
 	return b.String(), nil
 }
 
-// FromRows builds a Table from source rows (e.g. Postgres to_jsonb), keyed
-// by the given key columns.
+// FromRows builds a Table from source rows keyed by the given key columns.
 func FromRows(keyCols []string, rows []event.Row) (Table, error) {
 	t := make(Table, len(rows))
 	for _, r := range rows {
@@ -232,10 +208,7 @@ func FromRows(keyCols []string, rows []event.Row) (Table, error) {
 	return t, nil
 }
 
-// Diff compares the replayed table got with the source rows want and
-// describes every difference: rows missing at the sink, rows the source no
-// longer has, and rows whose columns differ (values compared as compact
-// JSON). It returns nil when the tables are equal.
+// Diff compares the replayed table with the source rows and describes every difference.
 func Diff(got, want Table) []string {
 	var out []string
 	for k, w := range want {

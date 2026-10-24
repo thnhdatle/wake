@@ -24,21 +24,14 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2"
 )
 
-// Integration tests of the cache over real Redis (WithL2). Every instance
-// gets its own client, as separate processes would; namespaces are unique
-// per test so tests may share a server.
-
-// redisWait bounds every wait on real Redis.
 const redisWait = 30 * time.Second
 
 func uniqueNS(prefix string) string {
 	var b [4]byte
-	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails (Go >= 1.24)
+	_, _ = rand.Read(b[:])
 	return prefix + "-" + hex.EncodeToString(b[:])
 }
 
-// redisNode starts a cache[string] on rdb and waits until its bus is up and
-// its epoch known.
 func redisNode(t *testing.T, ns string, rdb redis.UniversalClient, opts ...Option) *cache[string] {
 	t.Helper()
 	all := append([]Option{WithL2(rdb), WithDegradedL1TTL(time.Second)}, opts...)
@@ -50,7 +43,6 @@ func redisNode(t *testing.T, ns string, rdb redis.UniversalClient, opts ...Optio
 	return n
 }
 
-// waitFor polls cond every 10 ms until it holds, failing after redisWait.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(redisWait)
@@ -76,7 +68,6 @@ func inL1(n *cache[string], key string) (string, bool) {
 	return it.v, ok && !it.neg
 }
 
-// noneCached reports that no node's L1 holds prefix+key for keys user:0..
 func noneCached(nodes []*cache[string], keys int, prefix string) bool {
 	for _, n := range nodes {
 		for k := range keys {
@@ -106,10 +97,6 @@ func TestRedis_SingleNode(t *testing.T) {
 	})
 }
 
-// testStampede is the shape of the stampede acceptance test: 3 instances, 1,000 concurrent
-// GetOrLoad on a key that just expired in L1 and L2, a 50 ms loader; the
-// loader runs once. The loader also waits until both other instances wait
-// on the distributed lock, so the lock (not timing) is what is tested.
 func testStampede(t *testing.T, client func(*testing.T) redis.UniversalClient) {
 	t.Helper()
 	const callers = 1000
@@ -142,7 +129,7 @@ func testStampede(t *testing.T, client func(*testing.T) redis.UniversalClient) {
 			return metricValue(nodes[0].m.lockWaits)+metricValue(nodes[1].m.lockWaits)+
 				metricValue(nodes[2].m.lockWaits) == float64(len(nodes)-1)
 		})
-		select { // the loader's own work: 50 ms, below lock_timeout
+		select {
 		case <-time.After(50 * time.Millisecond):
 		case <-ctx.Done():
 		}
@@ -172,9 +159,6 @@ func testStampede(t *testing.T, client func(*testing.T) redis.UniversalClient) {
 	}
 }
 
-// testInvalidationAcrossInstances loads keys on 3 instances, then Delete and
-// Set on one must remove the keys from every other instance's L1 through
-// the bus, and the next load must see the new value.
 func testInvalidationAcrossInstances(t *testing.T, client func(*testing.T) redis.UniversalClient, keys int) {
 	t.Helper()
 	ns := uniqueNS("inval")
@@ -215,12 +199,6 @@ func testInvalidationAcrossInstances(t *testing.T, client func(*testing.T) redis
 	}
 }
 
-// TestRedis_OutageDegradesAndRecovers is the Redis outage acceptance test
-// with shortened
-// durations: keys warmed on 3 instances, Redis stopped under read load with
-// a loader failing for 10% of keys, no error returned to callers, a Delete
-// deferred during the outage and replayed after recovery, L2 used again
-// soon after Redis is back.
 func TestRedis_OutageDegradesAndRecovers(t *testing.T) {
 	t.Parallel()
 	srv := redistest.StartSingle(t)
@@ -252,7 +230,7 @@ func TestRedis_OutageDegradesAndRecovers(t *testing.T) {
 			}
 		}
 	}
-	readAll() // warm L1 and L2
+	readAll()
 	raw := srv.Client(t)
 	_, gkey, _ := l2.KeyNames(ns, nodes[0].epoch.Load(), "k1")
 	genBefore, err := raw.Get(ctx, gkey).Uint64()
@@ -270,7 +248,7 @@ func TestRedis_OutageDegradesAndRecovers(t *testing.T) {
 	})
 	require.ErrorIs(t, nodes[0].Delete(ctx, "k1"), ErrDeferred)
 	for range 5 {
-		readAll() // L1 only, capped ages, stale-if-error for the failing 10%
+		readAll()
 	}
 	for _, n := range nodes {
 		assert.Positive(t, metricValue(n.m.staleServes), "stale values served while the loader failed")
@@ -291,8 +269,6 @@ func TestRedis_OutageDegradesAndRecovers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, genAfter, genBefore, "the deferred invalidation reached L2")
 
-	// The warmed L2 values expired during the outage (TTL 2 s): one
-	// instance loads and fills L2, another one then hits it.
 	v, err := nodes[0].GetOrLoad(ctx, "k2", load("k2", 2))
 	require.NoError(t, err)
 	assert.Equal(t, "v-k2", v)
@@ -317,7 +293,7 @@ func TestRedis_Cluster(t *testing.T) {
 	})
 	t.Run("invalidation_across_instances", func(t *testing.T) {
 		t.Parallel()
-		testInvalidationAcrossInstances(t, client, 60) // keys spread over every slot range
+		testInvalidationAcrossInstances(t, client, 60)
 	})
 }
 
@@ -331,11 +307,6 @@ func TestRedis_TLS(t *testing.T) {
 	testInvalidationAcrossInstances(t, client, 5)
 }
 
-// TestNew_CloseStopsGoroutinesWithRedis checks the lifecycle contract against real Redis:
-// no goroutine started by New (subscriber, maintenance, redisl2 bus)
-// outlives Close. It is not parallel so the goroutine snapshot only sees
-// this test.
-//
 //nolint:paralleltest // goroutine snapshot must not see other tests' goroutines
 func TestNew_CloseStopsGoroutinesWithRedis(t *testing.T) {
 	srv := redistest.StartSingle(t)

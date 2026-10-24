@@ -8,8 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ProtobufCodec returns a Codec for a generated protobuf message type V
-// (a pointer type such as *pb.User).
+// ProtobufCodec returns a Codec for a generated protobuf message type.
 func ProtobufCodec[V proto.Message]() Codec[V] { return protobufCodec[V]{} }
 
 type protobufCodec[V proto.Message] struct{}

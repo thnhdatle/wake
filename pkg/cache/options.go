@@ -40,9 +40,7 @@ const (
 	defaultLockTimeout = 5 * time.Second
 	defaultDegradedTTL = 5 * time.Second
 	defaultMaxPending  = 10_000
-	// genGrace is added to value TTL + lock timeout to get the generation
-	// TTL.
-	genGrace = time.Minute
+	genGrace           = time.Minute
 )
 
 func defaultConfig(namespace string) config {
@@ -62,8 +60,7 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), errInvalidConfig)
 }
 
-// WithL1 bounds the in-process tier by entries and encoded bytes (default
-// 10,000 entries, 64 MiB).
+// WithL1 bounds the in-process tier by entries and encoded bytes.
 func WithL1(maxEntries int, maxBytes int64) Option {
 	return func(c *config) error {
 		if maxEntries <= 0 || maxBytes <= 0 {
@@ -74,9 +71,7 @@ func WithL1(maxEntries int, maxBytes int64) Option {
 	}
 }
 
-// WithTTL sets the value TTL (default 5 min). Each written value lives for
-// ttl minus a uniformly random amount in [0, jitter), so values loaded
-// together do not expire together; jitter must be below ttl.
+// WithTTL sets the value TTL and its jitter.
 func WithTTL(ttl, jitter time.Duration) Option {
 	return func(c *config) error {
 		if ttl <= 0 || jitter < 0 || jitter >= ttl {
@@ -87,8 +82,7 @@ func WithTTL(ttl, jitter time.Duration) Option {
 	}
 }
 
-// WithNegativeTTL caches a loader's ErrNotFound for ttl (default: not
-// cached).
+// WithNegativeTTL caches a loader's ErrNotFound for ttl.
 func WithNegativeTTL(ttl time.Duration) Option {
 	return func(c *config) error {
 		if ttl <= 0 {
@@ -99,9 +93,7 @@ func WithNegativeTTL(ttl time.Duration) Option {
 	}
 }
 
-// WithStaleIfError lets GetOrLoad return an expired L1 value, expired for
-// less than maxStale, when the loader fails (default: disabled). Values
-// removed by an invalidation are never served stale.
+// WithStaleIfError lets GetOrLoad return an expired L1 value when the loader fails.
 func WithStaleIfError(maxStale time.Duration) Option {
 	return func(c *config) error {
 		if maxStale <= 0 {
@@ -112,8 +104,7 @@ func WithStaleIfError(maxStale time.Duration) Option {
 	}
 }
 
-// WithInvalidationBus sets the L2 pub/sub channel (default
-// wake:inval:<namespace>). Every instance of a namespace must use the same.
+// WithInvalidationBus sets the L2 pub/sub channel.
 func WithInvalidationBus(channel string) Option {
 	return func(c *config) error {
 		if channel == "" {
@@ -124,8 +115,7 @@ func WithInvalidationBus(channel string) Option {
 	}
 }
 
-// WithLockTimeout sets the load lock TTL and how long waiters wait for the
-// lock holder before loading themselves (default 5 s).
+// WithLockTimeout sets the load lock TTL and the wait for the lock holder.
 func WithLockTimeout(d time.Duration) Option {
 	return func(c *config) error {
 		if d <= 0 {
@@ -136,8 +126,7 @@ func WithLockTimeout(d time.Duration) Option {
 	}
 }
 
-// WithDegradedL1TTL caps the age of L1 values while L2 or the invalidation
-// bus is unreachable (default 5 s): invalidations may be missed then.
+// WithDegradedL1TTL caps the age of L1 values while L2 or the bus is unreachable.
 func WithDegradedL1TTL(d time.Duration) Option {
 	return func(c *config) error {
 		if d <= 0 {
@@ -148,11 +137,7 @@ func WithDegradedL1TTL(d time.Duration) Option {
 	}
 }
 
-// WithMaxPendingInvalidations bounds the keys whose L2 invalidation is
-// deferred while L2 is unreachable (default 10,000). When the bound is
-// exceeded the whole namespace is invalidated (epoch increment) on
-// recovery. With n = 0 nothing is deferred: Delete and Set return an error
-// (not ErrDeferred) while L2 is unreachable.
+// WithMaxPendingInvalidations bounds the keys whose invalidation is deferred while L2 is down.
 func WithMaxPendingInvalidations(n int) Option {
 	return func(c *config) error {
 		if n < 0 {
@@ -163,9 +148,7 @@ func WithMaxPendingInvalidations(n int) Option {
 	}
 }
 
-// WithCompression compresses L2 payloads of at least minBytes with zstd
-// (default: off). Compressed payloads are always readable, so instances
-// may differ in this setting.
+// WithCompression compresses L2 payloads of at least minBytes with zstd.
 func WithCompression(minBytes int) Option {
 	return func(c *config) error {
 		if minBytes <= 0 {
@@ -176,8 +159,7 @@ func WithCompression(minBytes int) Option {
 	}
 }
 
-// WithMetrics registers the wake_cache_* metrics, labeled with the
-// namespace, on reg (default: not exported). Several caches may share reg.
+// WithMetrics registers the wake_cache_* metrics on reg.
 func WithMetrics(reg prometheus.Registerer) Option {
 	return func(c *config) error {
 		if reg == nil {
@@ -188,7 +170,7 @@ func WithMetrics(reg prometheus.Registerer) Option {
 	}
 }
 
-// WithClock sets the time source for TTLs and waits (default: system clock).
+// WithClock sets the time source.
 func WithClock(clk Clock) Option {
 	return func(c *config) error {
 		if clk == nil {
@@ -199,24 +181,7 @@ func WithClock(clk Clock) Option {
 	}
 }
 
-// WithL2 adds the shared Redis tier (default: none, L1 only). client may be
-// a single node, Sentinel (failover) or Cluster client; the scripts need
-// Redis 5 or later (they read TIME before writing) and are tested with
-// Redis 7. Every per-key operation is one Lua script over keys sharing the
-// {<key>} hash tag, so Cluster works without cross-slot commands; on
-// Cluster the empty key "" is not supported (its tag "{}" is ignored by
-// Redis, so its keys would span slots).
-//
-// New then starts the invalidation-bus subscriber on the WithInvalidationBus
-// channel and a maintenance goroutine; Close stops both and releases the
-// subscription connection, but never closes client, which stays owned by the
-// caller. The subscription is probed after half of WithDegradedL1TTL of
-// silence, so a dead link is detected within WithDegradedL1TTL.
-//
-// New succeeds while Redis is unreachable: the cache starts degraded
-// (L1 only, capped L1 ages) and switches to L2 once Redis answers. Run Redis
-// with maxmemory-policy noeviction or volatile-*, since evicting a
-// generation key would let an old value be read again.
+// WithL2 adds the shared Redis tier.
 func WithL2(client redis.UniversalClient) Option {
 	return func(c *config) error {
 		if client == nil {
@@ -233,8 +198,6 @@ func WithL2(client redis.UniversalClient) Option {
 	}
 }
 
-// withBackend injects an L2 factory; WithL2 (Redis) builds on it and unit
-// tests use it with l2fake.
 func withBackend(factory func(l2.Config) (l2.Backend, error)) Option {
 	return func(c *config) error {
 		if factory == nil {

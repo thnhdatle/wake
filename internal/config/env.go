@@ -11,16 +11,12 @@ import (
 	"strings"
 )
 
-// EnvPrefix starts the name of every environment variable that overrides a key.
 const EnvPrefix = "WAKE_"
 
-// EnvName returns the environment variable that overrides the key at the
-// dotted path: "stream.status_interval" -> WAKE_STREAM_STATUS_INTERVAL.
 func EnvName(path string) string {
 	return EnvPrefix + strings.ToUpper(strings.NewReplacer(".", "_", "-", "_").Replace(path))
 }
 
-// setting is one overridable scalar key of a Config.
 type setting struct {
 	path  string
 	value reflect.Value
@@ -28,9 +24,6 @@ type setting struct {
 
 var textUnmarshalerType = reflect.TypeFor[textUnmarshaler]()
 
-// settings lists the scalar keys (strings, bools, integers, durations, sizes
-// and string lists) of the non-list sections of cfg. Entries of the sinks list
-// and map-valued keys (name_map, templates) are file-only.
 func settings(cfg *Config) []setting {
 	var out []setting
 	collect(reflect.ValueOf(cfg).Elem(), "", &out)
@@ -71,7 +64,6 @@ func isScalar(t reflect.Type) bool {
 	}
 }
 
-// assign parses raw into the setting's field.
 func (s setting) assign(raw string) error {
 	if u, ok := s.value.Addr().Interface().(textUnmarshaler); ok {
 		return u.UnmarshalText([]byte(raw))
@@ -105,8 +97,6 @@ func (s setting) assign(raw string) error {
 	return nil
 }
 
-// applyEnv overrides keys from the environment through lookup. A nil lookup
-// applies nothing.
 func applyEnv(cfg *Config, lookup func(string) (string, bool)) error {
 	if lookup == nil {
 		return nil
@@ -125,7 +115,6 @@ func applyEnv(cfg *Config, lookup func(string) (string, bool)) error {
 	return errors.Join(errs...)
 }
 
-// applyOverrides sets keys by dotted path, as CLI flags do.
 func applyOverrides(cfg *Config, overrides map[string]string) error {
 	if len(overrides) == 0 {
 		return nil

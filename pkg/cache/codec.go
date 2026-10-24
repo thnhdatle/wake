@@ -7,8 +7,7 @@ import (
 	"fmt"
 )
 
-// Codec converts values to the bytes stored in L2 and back. Its encoded
-// size is what L1 accounts against WithL1's byte bound.
+// Codec converts values to the bytes stored in L2 and back.
 type Codec[V any] interface {
 	Marshal(v V) ([]byte, error)
 	Unmarshal(data []byte) (V, error)

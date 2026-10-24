@@ -117,7 +117,6 @@ func TestSnapshot_MarshalText_RoundTrip(t *testing.T) {
 	assert.Equal(t, in, out, "failed unmarshal leaves the value unchanged")
 }
 
-// genSnapshot draws a valid snapshot anywhere in the xid8 space.
 func genSnapshot(t *rapid.T) watermark.Snapshot {
 	xmin := rapid.Uint64Range(3, math.MaxUint64-1<<31).Draw(t, "xmin")
 	if uint32(xmin) == 0 {

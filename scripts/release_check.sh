@@ -10,14 +10,12 @@ problem() {
 	fail=1
 }
 
-# Only these hidden directories and top-level Markdown files belong in the repository.
 hidden=$(git ls-files | grep -E '^\.[^/]+/' | grep -vE '^\.(github|githooks)/' || true)
 [ -z "$hidden" ] || problem "unexpected hidden files are tracked: $(echo "$hidden" | tr '\n' ' ')"
 markdown=$(git ls-files '*.md' | grep -v / |
 	grep -vE '^(README|CHANGELOG|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY|ROADMAP)\.md$' || true)
 [ -z "$markdown" ] || problem "unexpected top-level Markdown files: $(echo "$markdown" | tr '\n' ' ')"
 
-# One-line Conventional Commit messages.
 re='^(feat|fix|perf|refactor|test|docs|build|ci|chore)(\([a-z0-9-]+\))?!?: [a-z0-9].{0,70}[^.]$'
 while read -r sha; do
 	[ -n "$sha" ] || continue
@@ -31,7 +29,6 @@ while read -r sha; do
 	fi
 done < <(git rev-list HEAD 2>/dev/null || true)
 
-# No TODO without a roadmap or issue reference.
 todos=$(git ls-files --cached --others --exclude-standard -- '*.go' '*.sh' '*.yml' '*.yaml' 'Makefile' |
 	grep -v '^scripts/release_check.sh$' |
 	xargs grep -nE 'TODO' 2>/dev/null |
@@ -39,13 +36,11 @@ todos=$(git ls-files --cached --others --exclude-standard -- '*.go' '*.sh' '*.ym
 [ -z "$todos" ] || problem "bare TODO found:
 $todos"
 
-# SPDX headers in every Go source file.
 while read -r f; do
 	[ -n "$f" ] || continue
 	head -n 5 "$f" | grep -q 'SPDX-License-Identifier: Apache-2.0' || problem "missing SPDX header: $f"
 done < <(git ls-files --cached --others --exclude-standard -- '*.go')
 
-# Community files.
 for f in README.md LICENSE NOTICE CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md CHANGELOG.md ROADMAP.md \
 	.github/CODEOWNERS .github/dependabot.yml .github/PULL_REQUEST_TEMPLATE.md \
 	.github/ISSUE_TEMPLATE/bug_report.yml .github/ISSUE_TEMPLATE/feature_request.yml \
@@ -54,7 +49,6 @@ for f in README.md LICENSE NOTICE CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md
 	[ -f "$f" ] || problem "missing community file: $f"
 done
 
-# The latest CHANGELOG release section carries its date.
 latest=$(grep -m1 -E '^## \[[0-9]' CHANGELOG.md || true)
 [[ $latest =~ ^##\ \[[0-9]+\.[0-9]+\.[0-9]+\]\ -\ [0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] ||
 	problem "CHANGELOG release section is not dated: ${latest:-none}"

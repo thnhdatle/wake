@@ -2,13 +2,11 @@
 
 package pgoutput
 
-// Insert is a new row.
 type Insert struct {
 	RelationOID uint32
 	New         Tuple
 }
 
-// MessageType implements Message.
 func (*Insert) MessageType() MessageType { return MessageInsert }
 
 func parseInsert(r *reader) *Insert {

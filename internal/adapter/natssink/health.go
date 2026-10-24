@@ -8,35 +8,25 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// fault is one current error condition of the sink.
 type fault struct {
 	v      verdict
 	reason string
 }
 
-// faultSlot names the independent error conditions folded into Health.
 type faultSlot int
 
 const (
-	// faultBlock: the dispatcher cannot publish the next event (event too
-	// large, stream missing or not creatable, not connected yet).
 	faultBlock faultSlot = iota
-	// faultWrite: a publish failed; the event waits for re-publication.
 	faultWrite
-	// faultConn: the connection is down or rejected (watchdog).
 	faultConn
 	faultSlots
 )
 
-// healthTracker folds the fault slots into one SinkHealth: the worst state
-// wins (fatal over retrying), and Since changes only when the state does.
-// Callers hold Sink.mu.
 type healthTracker struct {
 	slots   [faultSlots]*fault
 	current pipeline.SinkHealth
 }
 
-// transition is a state change to log after Sink.mu is released.
 type transition struct {
 	changed bool
 	health  pipeline.SinkHealth
@@ -47,7 +37,6 @@ func (h *healthTracker) set(slot faultSlot, f *fault, now time.Time) transition 
 	return h.recompute(now)
 }
 
-// clear removes the faults of slots.
 func (h *healthTracker) clear(now time.Time, slots ...faultSlot) transition {
 	dirty := false
 	for _, slot := range slots {

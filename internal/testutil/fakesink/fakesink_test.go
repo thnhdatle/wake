@@ -86,7 +86,7 @@ func TestSink_Send_AutoAck(t *testing.T) {
 
 func TestSink_Send_BlocksAtCapacity(t *testing.T) {
 	t.Parallel()
-	s := fakesink.New("k", fakesink.WithCapacity(0)) // means 1
+	s := fakesink.New("k", fakesink.WithCapacity(0))
 	require.NoError(t, s.Send(context.Background(), pipeline.Record{}))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

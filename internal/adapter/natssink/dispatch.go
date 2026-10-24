@@ -15,10 +15,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// Run implements pipeline.Sink: it connects (retrying until ctx ends),
-// creates or checks the stream, publishes accepted events in Send order and
-// acknowledges each on its PubAck. It returns nil when ctx ends, after
-// waiting at most the shutdown timeout for outstanding PubAcks.
+// Run publishes queued events in order until ctx is canceled.
 func (s *Sink) Run(ctx context.Context) error {
 	if !s.running.CompareAndSwap(false, true) {
 		return ErrAlreadyRunning
@@ -44,9 +41,6 @@ func (s *Sink) Run(ctx context.Context) error {
 	return nil
 }
 
-// connect dials until it gets a connection or ctx ends. nats.go retries a
-// failed first connect itself, so this loop only repeats on errors such as
-// an unreadable credentials file.
 func (s *Sink) connect(ctx context.Context) conn {
 	for attempt := 0; ; attempt++ {
 		c, err := s.dial(s)
@@ -61,32 +55,23 @@ func (s *Sink) connect(ctx context.Context) conn {
 	}
 }
 
-// retryState counts consecutive failed attempts for the backoff.
 type retryState struct {
-	block   int // prepare failures of the head event
-	recover int // failed re-publication rounds
+	block   int
+	recover int
 }
 
-// dispatch is the single publisher loop. It re-publishes failed events
-// before anything newer, checks each event (stream, size) before publishing
-// it and publishes in the order Send accepted them. Once the connection was
-// re-established it waits until every message published on the previous
-// connection is resolved before publishing more, so a message lost with the
-// old connection is re-published before anything newer is stored.
 func (s *Sink) dispatch(ctx context.Context, c conn) {
 	var st dispatchState
 	for ctx.Err() == nil && s.step(ctx, c, &st) {
 	}
 }
 
-// dispatchState is the dispatcher's state between steps.
 type dispatchState struct {
-	next     *unit // taken from the queue, not yet published
+	next     *unit
 	seq      uint64
 	attempts retryState
 }
 
-// step makes one move of the dispatcher; it reports false once ctx ended.
 func (s *Sink) step(ctx context.Context, c conn, st *dispatchState) bool {
 	if s.hasFailures() {
 		return s.recoverFailed(ctx, c, &st.attempts)
@@ -96,8 +81,6 @@ func (s *Sink) step(ctx context.Context, c conn, st *dispatchState) bool {
 			st.seq++
 			st.next.seq = st.seq
 		}
-		// A failure may have arrived while take waited: look again
-		// before publishing anything newer.
 		return true
 	}
 	if err := s.prepare(ctx, c, st.next); err != nil {
@@ -106,7 +89,7 @@ func (s *Sink) step(ctx context.Context, c conn, st *dispatchState) bool {
 	s.unblock()
 	st.attempts.block = 0
 	if s.hasFailures() {
-		return true // re-publish those first
+		return true
 	}
 	if errors.Is(s.publish(c, st.next, false), errEpochChanged) {
 		return s.waitIdle(ctx)
@@ -115,8 +98,6 @@ func (s *Sink) step(ctx context.Context, c conn, st *dispatchState) bool {
 	return true
 }
 
-// take returns the next accepted event, or nil when ctx ended or a publish
-// failed meanwhile.
 func (s *Sink) take(ctx context.Context) *unit {
 	select {
 	case <-ctx.Done():
@@ -134,8 +115,6 @@ func (s *Sink) hasFailures() bool {
 	return len(s.failed) > 0
 }
 
-// prepare makes sure the stream exists and checks u against
-// max_event_bytes and the server's max_payload.
 func (s *Sink) prepare(ctx context.Context, c conn, u *unit) error {
 	if err := s.readyStream(ctx, c); err != nil {
 		return err
@@ -161,8 +140,6 @@ func (s *Sink) prepare(ctx context.Context, c conn, u *unit) error {
 	return nil
 }
 
-// readyStream creates or updates the stream (nats.create_stream) or checks
-// that it exists, once per run and again after a publish found no stream.
 func (s *Sink) readyStream(ctx context.Context, c conn) error {
 	s.mu.Lock()
 	ready := s.streamReady
@@ -187,8 +164,6 @@ func (s *Sink) readyStream(ctx context.Context, c conn) error {
 	return nil
 }
 
-// blocked records a prepare failure and waits the backoff. It reports
-// whether ctx is still live.
 func (s *Sink) blocked(ctx context.Context, err error, attempt *int) bool {
 	s.noteBlocked(err)
 	d := s.delay(*attempt)
@@ -196,7 +171,6 @@ func (s *Sink) blocked(ctx context.Context, err error, attempt *int) bool {
 	return s.sleep(ctx, d)
 }
 
-// noteBlocked records a prepare failure in Health and the metrics.
 func (s *Sink) noteBlocked(err error) {
 	v := classify(err)
 	s.mu.Lock()
@@ -213,9 +187,6 @@ func (s *Sink) unblock() {
 	s.logTransition(tr)
 }
 
-// publish hands u to JetStream. It returns errEpochChanged, without
-// publishing, when the connection changed while earlier messages are still
-// unresolved; any other error has queued u for re-publication.
 func (s *Sink) publish(c conn, u *unit, retry bool) error {
 	ep := c.epoch()
 	now := s.clock.Now()
@@ -241,11 +212,10 @@ func (s *Sink) publish(c conn, u *unit, retry bool) error {
 		s.onResult(u, err)
 		return err
 	}
-	s.pending <- pendingAck{u: u, fut: fut} // never blocks: one entry per event in flight
+	s.pending <- pendingAck{u: u, fut: fut}
 	return nil
 }
 
-// collect resolves PubAck futures in publish order.
 func (s *Sink) collect(ctx context.Context) {
 	for {
 		select {
@@ -264,7 +234,6 @@ func (s *Sink) collect(ctx context.Context) {
 	}
 }
 
-// onResult settles one published event.
 func (s *Sink) onResult(u *unit, err error) {
 	now := s.clock.Now()
 	s.mu.Lock()
@@ -302,9 +271,6 @@ func (s *Sink) onResult(u *unit, err error) {
 	s.complete(u, latency, accepted)
 }
 
-// failLocked queues a failed event for re-publication and records the
-// error in Health; keep is false while shutting down. A disconnection
-// caused by a rejected login is reported as that rejection.
 func (s *Sink) failLocked(u *unit, err error, now time.Time) (transition, verdict, bool) {
 	if s.closing {
 		return transition{}, verdict{}, false
@@ -324,7 +290,6 @@ func (s *Sink) failLocked(u *unit, err error, now time.Time) (transition, verdic
 	return s.health.set(faultWrite, &fault{v: v, reason: reason}, now), v, true
 }
 
-// complete acknowledges an event and releases its buffer space.
 func (s *Sink) complete(u *unit, latency time.Duration, accepted int) {
 	s.obs.ObserveAcked(s.name, 1)
 	s.obs.ObserveLatency(s.name, latency)
@@ -337,9 +302,6 @@ func (s *Sink) complete(u *unit, latency time.Duration, accepted int) {
 	<-s.slots
 }
 
-// recoverFailed re-publishes failed events once every message in flight is
-// resolved, in dispatch order and after the backoff, then waits for them
-// before anything newer is published.
 func (s *Sink) recoverFailed(ctx context.Context, c conn, attempts *retryState) bool {
 	if !s.waitIdle(ctx) {
 		return false
@@ -392,7 +354,6 @@ func (s *Sink) requeue(us []*unit) {
 	s.mu.Unlock()
 }
 
-// waitIdle waits until no published message is unresolved.
 func (s *Sink) waitIdle(ctx context.Context) bool {
 	for {
 		s.mu.Lock()
@@ -409,9 +370,6 @@ func (s *Sink) waitIdle(ctx context.Context) bool {
 	}
 }
 
-// watch reports a connection that is down (fatal at once when the server
-// rejected the credentials, retrying after the stall timeout otherwise) and
-// published messages without PubAck for the stall timeout.
 func (s *Sink) watch(ctx context.Context, c conn) {
 	t := s.clock.NewTicker(max(s.stallTimeout/4, time.Millisecond))
 	defer t.Stop()
@@ -465,8 +423,6 @@ func (s *Sink) checkConn(c conn, downSince time.Time) time.Time {
 	return downSince
 }
 
-// tooLargeReason describes an event above the limit with its table, key
-// and lsn; it never contains row values.
 func tooLargeReason(u *unit, limit int64) string {
 	table := u.rec.Table()
 	if table == "" {
@@ -480,5 +436,4 @@ func tooLargeReason(u *unit, limit int64) string {
 		u.size, limit, table, key, u.rec.ID.LSN, u.id)
 }
 
-// maxReasonKey caps the key quoted in an event_too_large reason.
 const maxReasonKey = 128

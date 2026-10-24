@@ -10,8 +10,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// FuzzParsePayload checks that any accepted payload re-encodes to bytes
-// that decode to the same value.
 func FuzzParsePayload(f *testing.F) {
 	f.Add([]byte(`{"nonce":"01JB0000000000000000000000","run":3,"table":"public.users","chunk":0,"mark":"low"}`))
 	f.Add([]byte(`{"nonce":"01JB0000000000000000000000","run":3,"table":"public.users","chunk":2,"mark":"high",` +
@@ -31,8 +29,6 @@ func FuzzParsePayload(f *testing.F) {
 	})
 }
 
-// FuzzParseSnapshot checks that any accepted snapshot is valid and formats
-// to text that parses to the same value.
 func FuzzParseSnapshot(f *testing.F) {
 	f.Add("10:20:")
 	f.Add("10:20:10,12,12,19")
@@ -50,7 +46,6 @@ func FuzzParseSnapshot(f *testing.F) {
 	})
 }
 
-// FuzzParseTrigger checks that any accepted trigger round-trips.
 func FuzzParseTrigger(f *testing.F) {
 	f.Add([]byte(`{"table":"public.users"}`))
 	f.Add([]byte(`{"table":"app.v1.events"}`))

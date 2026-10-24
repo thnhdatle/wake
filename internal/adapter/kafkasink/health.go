@@ -8,37 +8,25 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// fault is one current error condition of the sink.
 type fault struct {
 	v      verdict
 	reason string
 }
 
-// faultSlot names the independent error conditions folded into Health.
 type faultSlot int
 
 const (
-	// faultBlock: the dispatcher cannot hand the next record to Kafka
-	// (event too large, topic missing or unreadable, record above the
-	// topic's limit).
 	faultBlock faultSlot = iota
-	// faultWrite: Kafka failed a record; it waits for re-production.
 	faultWrite
-	// faultStall: records are in flight but Kafka acknowledged nothing for
-	// the stall timeout (franz-go retries internally, e.g. broker down).
 	faultStall
 	faultSlots
 )
 
-// healthTracker folds the fault slots into one SinkHealth: the worst state
-// wins (fatal over retrying), and Since changes only when the state does.
-// Callers hold Sink.mu.
 type healthTracker struct {
 	slots   [faultSlots]*fault
 	current pipeline.SinkHealth
 }
 
-// transition is a state change to log after Sink.mu is released.
 type transition struct {
 	changed bool
 	health  pipeline.SinkHealth
@@ -49,7 +37,6 @@ func (h *healthTracker) set(slot faultSlot, f *fault, now time.Time) transition 
 	return h.recompute(now)
 }
 
-// clear removes the faults of slots.
 func (h *healthTracker) clear(now time.Time, slots ...faultSlot) transition {
 	dirty := false
 	for _, slot := range slots {

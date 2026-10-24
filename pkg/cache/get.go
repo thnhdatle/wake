@@ -13,11 +13,8 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/l1"
 )
 
-// maxSharedRetries bounds how often a GetOrLoad caller retries after the
-// shared (singleflight) load failed only because its leader's context ended.
 const maxSharedRetries = 2
 
-// l1Get reads L1, capping entry ages while degraded.
 func (c *cache[V]) l1Get(key string) (item[V], bool) {
 	if c.degraded() {
 		return c.l1.GetMaxAge(key, c.cfg.degradedTTL)
@@ -25,7 +22,6 @@ func (c *cache[V]) l1Get(key string) (item[V], bool) {
 	return c.l1.Get(key)
 }
 
-// Get implements Cache.
 func (c *cache[V]) Get(ctx context.Context, key string) (V, bool, error) {
 	var zero V
 	if c.closed.Load() {
@@ -49,10 +45,8 @@ func (c *cache[V]) Get(ctx context.Context, key string) (V, bool, error) {
 	return it.v, true, nil
 }
 
-// getL2 reads key from L2 and populates L1 through the guard. Any L2
-// failure is a miss.
 func (c *cache[V]) getL2(ctx context.Context, key string) (item[V], bool, error) {
-	tok := c.l1.Token(key) // before the epoch and the L2 read (L1 guard)
+	tok := c.l1.Token(key)
 	if !c.l2Readable(ctx, key) {
 		return item[V]{}, false, nil
 	}
@@ -76,13 +70,10 @@ func (c *cache[V]) getL2(ctx context.Context, key string) (item[V], bool, error)
 	return it, true, nil
 }
 
-// insertFromL2 populates L1 with a value read from (or written to) L2 at
-// generation gen, only if no invalidation touched the shard since tok.
 func (c *cache[V]) insertFromL2(tok l1.Token, key string, it item[V], size int, ttl time.Duration, gen uint64) {
 	c.l1.SetIfUnchanged(tok, key, l1.Entry[item[V]]{Value: it, Size: size, TTL: c.capTTL(ttl), Version: gen})
 }
 
-// GetOrLoad implements Cache.
 func (c *cache[V]) GetOrLoad(ctx context.Context, key string, load LoadFunc[V]) (V, error) {
 	var zero V
 	if c.closed.Load() {
@@ -106,11 +97,6 @@ func (c *cache[V]) GetOrLoad(ctx context.Context, key string, load LoadFunc[V]) 
 	return it.v, nil
 }
 
-// loadShared runs one fetch per key in this process (singleflight).
-// Callers sharing a fetch share its leader's LoadFunc and context. The
-// singleflight key includes the L1 shard invalidation counter: a caller that
-// starts after an invalidation of the key never joins a fetch that started
-// before it (whose loader may have read the old row).
 func (c *cache[V]) loadShared(ctx context.Context, key string, load LoadFunc[V]) (item[V], error) {
 	for attempt := 0; ; attempt++ {
 		tok := c.l1.Token(key)
@@ -124,7 +110,7 @@ func (c *cache[V]) loadShared(ctx context.Context, key string, load LoadFunc[V])
 			return item[V]{}, ctx.Err()
 		case res := <-ch:
 			if res.Err != nil && attempt < maxSharedRetries && ctx.Err() == nil && isContextErr(res.Err) {
-				continue // the leader gave up, this caller has not
+				continue
 			}
 			it, _ := res.Val.(item[V])
 			return it, res.Err
@@ -136,9 +122,6 @@ func isContextErr(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
-// fetch is the miss path: L2 protocol when L2 is usable, otherwise a local
-// load cached in L1 only.
-// tok was captured before the fetch was shared, so it predates every read.
 func (c *cache[V]) fetch(ctx context.Context, key string, load LoadFunc[V], tok l1.Token) (item[V], error) {
 	if c.backend == nil {
 		return c.loadLocal(ctx, key, load, tok, false)
@@ -150,8 +133,6 @@ func (c *cache[V]) fetch(ctx context.Context, key string, load LoadFunc[V], tok 
 	return lc.run(ctx)
 }
 
-// loadLocal calls the loader and caches the result in L1 only. Without a
-// valid L2 generation (capped) the L1 TTL is capped to the degraded TTL.
 func (c *cache[V]) loadLocal(ctx context.Context, key string, load LoadFunc[V], tok l1.Token, capped bool) (
 	item[V], error,
 ) {
@@ -175,8 +156,6 @@ func (c *cache[V]) loadLocal(ctx context.Context, key string, load LoadFunc[V], 
 	return it, notFoundIf(it)
 }
 
-// loadFailed handles a loader error: ErrNotFound passes through; other
-// errors are answered from an expired L1 value within stale_if_error.
 func (c *cache[V]) loadFailed(key string, err error) (item[V], error) {
 	if errors.Is(err, ErrNotFound) {
 		return item[V]{neg: true}, ErrNotFound

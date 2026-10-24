@@ -20,8 +20,6 @@ var update = flag.Bool("update", false, "rewrite testdata/golden/reader")
 
 const readerGoldenDir = "testdata/golden/reader"
 
-// goldenVariants are the configurations every recorded file is replayed
-// with.
 var goldenVariants = []struct {
 	name   string
 	cfg    ReaderConfig
@@ -35,8 +33,6 @@ var goldenVariants = []struct {
 	},
 }
 
-// TestReader_Run_Golden replays the recorded Postgres traffic through the
-// reader into a sink and compares the records with golden files.
 func TestReader_Run_Golden(t *testing.T) {
 	t.Parallel()
 	paths, err := filepath.Glob(filepath.Join(recordedDir, "*.hex"))
@@ -68,9 +64,6 @@ func TestReader_Run_Golden(t *testing.T) {
 	}
 }
 
-// TestReader_Run_RecordedIDs checks the CDC event rules on the recorded traffic
-// explicitly: ids and index_in_tx, schema-change placement, message
-// forwarding and the truncate rule.
 func TestReader_Run_RecordedIDs(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -86,9 +79,6 @@ func TestReader_Run_RecordedIDs(t *testing.T) {
 		{
 			name: "multi forwards messages and truncate", file: "multi.hex",
 			cfg: ReaderConfig{EmitTruncate: true, EmitMessages: true},
-			// The transactional message does not consume index_in_tx; the
-			// non-transactional one is its own transaction at its LSN; the
-			// heartbeat is consumed.
 			want: []string{
 				"0/197D6F0-0", "0/197D6F0-1", "0/197D6F0-2", "0/197D6F0-m0", "0/197D768-m0", "0/197DDB0-0",
 			},

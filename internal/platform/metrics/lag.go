@@ -8,8 +8,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// WAL status levels of wake_slot_wal_status; the same mapping as
-// lag.WALStatusLevel (a test keeps them equal).
 const (
 	walStatusUnknown    = -1
 	walStatusReserved   = 0
@@ -18,8 +16,7 @@ const (
 	walStatusLost       = 3
 )
 
-// Lag exports the lag monitor's values and the end-to-end latency. It
-// satisfies lag.Observer and lag.LatencyObserver.
+// Lag exports the lag monitor values and the end-to-end latency.
 type Lag struct {
 	slotLag     prometheus.Gauge
 	walStatus   prometheus.Gauge
@@ -29,10 +26,7 @@ type Lag struct {
 	latency     *prometheus.HistogramVec
 }
 
-// NewLag creates the lag collectors and registers them on reg:
-// wake_slot_lag_bytes, wake_slot_wal_status (-1 until the first poll),
-// wake_oldest_unacked_age_seconds, wake_lag_poll_errors_total,
-// wake_alert_active{rule} and wake_end_to_end_latency_seconds{sink}.
+// NewLag creates the lag collectors and registers them on reg.
 func NewLag(reg prometheus.Registerer) (*Lag, error) {
 	l := &Lag{
 		slotLag: prometheus.NewGauge(prometheus.GaugeOpts{
@@ -68,23 +62,19 @@ func NewLag(reg prometheus.Registerer) (*Lag, error) {
 	return l, nil
 }
 
-// ObserveSlot sets wake_slot_lag_bytes and wake_slot_wal_status.
 func (l *Lag) ObserveSlot(lagBytes int64, walStatus string) {
 	l.slotLag.Set(float64(lagBytes))
 	l.walStatus.Set(walStatusLevel(walStatus))
 }
 
-// ObserveOldestUnackedAge sets wake_oldest_unacked_age_seconds.
 func (l *Lag) ObserveOldestUnackedAge(age time.Duration) {
 	l.oldestAge.Set(age.Seconds())
 }
 
-// ObservePollError counts a failed slot poll.
 func (l *Lag) ObservePollError(error) {
 	l.pollErrors.Inc()
 }
 
-// SetAlertActive sets wake_alert_active{rule} to 1 or 0.
 func (l *Lag) SetAlertActive(rule string, active bool) {
 	v := 0.0
 	if active {
@@ -93,7 +83,6 @@ func (l *Lag) SetAlertActive(rule string, active bool) {
 	l.alertActive.WithLabelValues(rule).Set(v)
 }
 
-// ObserveEndToEndLatency records one acknowledged event's latency for sink.
 func (l *Lag) ObserveEndToEndLatency(sink string, latency time.Duration) {
 	l.latency.WithLabelValues(sink).Observe(latency.Seconds())
 }

@@ -11,19 +11,16 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// settingNames are the pg_settings rows ServerSettings reads.
 var settingNames = []string{
 	"server_version_num", "wal_level", "wal_sender_timeout", "max_replication_slots", "max_wal_senders",
 	"max_slot_wal_keep_size",
 }
 
-// setting is one pg_settings row: the value in the setting's unit.
 type setting struct {
 	value string
 	unit  string
 }
 
-// parseSettings converts the pg_settings rows of settingNames.
 func parseSettings(rows map[string]setting) (pipeline.ServerSettings, error) {
 	var s pipeline.ServerSettings
 	for _, name := range settingNames {
@@ -62,8 +59,6 @@ func intSetting(rows map[string]setting, name string) (int, error) {
 	return v, nil
 }
 
-// splitUnit splits a pg_settings unit such as "8kB" or "ms" into its
-// multiplier and base unit.
 func splitUnit(unit string) (int64, string, error) {
 	i := 0
 	for i < len(unit) && unit[i] >= '0' && unit[i] <= '9' {
@@ -80,7 +75,6 @@ func splitUnit(unit string) (int64, string, error) {
 	return mult, strings.TrimSpace(unit[i:]), nil
 }
 
-// durationSetting converts a time setting; 0 stays 0.
 func durationSetting(s setting) (time.Duration, error) {
 	v, err := strconv.ParseInt(s.value, 10, 64)
 	if err != nil {
@@ -101,7 +95,6 @@ func durationSetting(s setting) (time.Duration, error) {
 	return time.Duration(v*mult) * u, nil
 }
 
-// sizeSetting converts a memory setting to bytes.
 func sizeSetting(s setting) (int64, error) {
 	v, err := strconv.ParseInt(s.value, 10, 64)
 	if err != nil {

@@ -16,25 +16,17 @@ const (
 	maxYearDigits    = 9
 )
 
-// civilDate is a calendar date as Postgres prints it (DateStyle ISO). year is
-// the astronomical year: 1 BC is year 0, 44 BC is year -43.
 type civilDate struct {
 	year, month, day int
 }
 
-// clockTime is a time of day; frac is the fractional part including its
-// leading '.', copied verbatim (empty when the seconds are whole).
 type clockTime struct {
 	hour, minute, second int
 	frac                 []byte
 }
 
-// utcOffset is a UTC offset in seconds east of Greenwich.
 type utcOffset int
 
-// appendDateTime converts date, timestamp and timestamptz output (DateStyle
-// ISO) to RFC 3339 / ISO 8601 strings; see the package documentation for BC
-// years, offsets with seconds and infinities.
 func appendDateTime(dst []byte, typeOID uint32, kind valueKind, text []byte) ([]byte, error) {
 	switch string(text) {
 	case "infinity", "-infinity":
@@ -75,8 +67,6 @@ func appendDateTime(dst []byte, typeOID uint32, kind valueKind, text []byte) ([]
 	return appendTimestamp(dst, d, c, &off), nil
 }
 
-// appendTimeOfDay converts time and timetz output to RFC 3339 partial-time
-// strings, timetz with a "+hh:mm" offset.
 func appendTimeOfDay(dst []byte, typeOID uint32, withZone bool, text []byte) ([]byte, error) {
 	c, rest, ok := parseClock(text)
 	if !ok {
@@ -111,8 +101,6 @@ func appendTimestamp(dst []byte, d civilDate, c clockTime, off *utcOffset) []byt
 	return append(dst, '"')
 }
 
-// toUTC converts a local date and time with an offset that has seconds (not
-// representable in RFC 3339) to UTC.
 func toUTC(d civilDate, c clockTime, off utcOffset) (civilDate, clockTime) {
 	t := time.Date(d.year, time.Month(d.month), d.day, c.hour, c.minute, c.second, 0,
 		time.FixedZone("", int(off))).UTC()
@@ -120,7 +108,6 @@ func toUTC(d civilDate, c clockTime, off utcOffset) (civilDate, clockTime) {
 		clockTime{hour: t.Hour(), minute: t.Minute(), second: t.Second(), frac: c.frac}
 }
 
-// parseDate reads "YYYY-MM-DD" (four or more year digits) at the start of s.
 func parseDate(s []byte, bc bool) (civilDate, []byte, bool) {
 	n := 0
 	for n < len(s) && n <= maxYearDigits && isDigit(s[n]) {
@@ -142,12 +129,10 @@ func parseDate(s []byte, bc bool) (civilDate, []byte, bool) {
 	return d, s[n+6:], true
 }
 
-// valid checks the ranges of a date as written (before BC conversion).
 func (d civilDate) valid() bool {
 	return d.year > 0 && d.month >= 1 && d.month <= 12 && d.day >= 1 && d.day <= 31
 }
 
-// parseClock reads "hh:mm:ss[.f+]" at the start of s.
 func parseClock(s []byte) (clockTime, []byte, bool) {
 	if len(s) < 8 || s[2] != ':' || s[5] != ':' {
 		return clockTime{}, nil, false
@@ -165,7 +150,6 @@ func parseClock(s []byte) (clockTime, []byte, bool) {
 	return c, rest, ok
 }
 
-// scanFraction reads an optional ".digits" at the start of s.
 func scanFraction(s []byte) (frac, rest []byte, ok bool) {
 	if len(s) == 0 || s[0] != '.' {
 		return nil, s, true
@@ -182,8 +166,6 @@ func scanFraction(s []byte) (frac, rest []byte, ok bool) {
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-// parseOffset reads a whole "+hh[:mm[:ss]]" offset. whole reports whether
-// the offset has no seconds part, i.e. is representable in RFC 3339.
 func parseOffset(s []byte) (off utcOffset, whole, ok bool) {
 	if len(s) < 3 || (s[0] != '+' && s[0] != '-') {
 		return 0, false, false
@@ -247,7 +229,6 @@ func appendOffset(dst []byte, off utcOffset) []byte {
 
 const decimalDigits = "0123456789"
 
-// append2 appends v (0..99) as two digits.
 func append2(dst []byte, v int) []byte {
 	return append(dst, decimalDigits[v/10%10], decimalDigits[v%10])
 }
@@ -273,7 +254,6 @@ func twoDigits(s []byte) (int, bool) {
 	return int(s[0]-'0')*10 + int(s[1]-'0'), true
 }
 
-// atoi parses a short run of ASCII digits validated by the caller.
 func atoi(s []byte) int {
 	v := 0
 	for _, c := range s {

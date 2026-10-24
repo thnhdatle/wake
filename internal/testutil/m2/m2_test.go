@@ -60,7 +60,7 @@ func TestReplayer_State(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
-		payloads []string // added in this (arbitrary) order
+		payloads []string
 		want     m2.Table
 	}{
 		{

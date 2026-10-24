@@ -197,11 +197,6 @@ func TestLaneScheduler_Complete_Unknown(t *testing.T) {
 	}
 }
 
-// TestLaneScheduler_Property_OrderAndBarriers checks, for random pushes,
-// batch limits and completion orders: per key, records are dispatched in
-// push order; a barrier is dispatched alone, only after every earlier record
-// completed, and before any later record is dispatched; every record is
-// dispatched exactly once.
 func TestLaneScheduler_Property_OrderAndBarriers(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
@@ -243,7 +238,7 @@ func TestLaneScheduler_Property_OrderAndBarriers(t *testing.T) {
 
 type laneModel struct {
 	pushed, completed int
-	keys              map[uint64]string // record n -> key ("" for barriers)
+	keys              map[uint64]string
 	lastPerKey        map[string]uint64
 	dispatched        map[uint64]bool
 	done              map[uint64]bool

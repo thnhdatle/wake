@@ -22,8 +22,8 @@ import (
 type Bundle struct {
 	Dir            string
 	CAFile         string
-	CertFile       string // server certificate
-	KeyFile        string // server key
+	CertFile       string
+	KeyFile        string
 	ClientCertFile string
 	ClientKeyFile  string
 	CAPEM          []byte
@@ -33,9 +33,7 @@ type Bundle struct {
 	ClientKeyPEM   []byte
 }
 
-// Generate creates a CA, a server certificate valid for hosts (DNS names or
-// IP addresses) and a client certificate, all valid for 24 hours. It fails
-// the test on any error.
+// Generate creates a CA, a server certificate for hosts and a client certificate.
 func Generate(tb testing.TB, hosts ...string) *Bundle {
 	tb.Helper()
 	dir := tb.TempDir()
@@ -69,15 +67,12 @@ func Generate(tb testing.TB, hosts ...string) *Bundle {
 	return b
 }
 
-// CertPool returns a pool containing only the CA.
 func (b *Bundle) CertPool() *x509.CertPool {
 	p := x509.NewCertPool()
 	p.AppendCertsFromPEM(b.CAPEM)
 	return p
 }
 
-// ServerTLS returns a server configuration that requires client
-// certificates signed by the CA.
 func (b *Bundle) ServerTLS(tb testing.TB) *tls.Config {
 	tb.Helper()
 	cert, err := tls.X509KeyPair(b.CertPEM, b.KeyPEM)
@@ -92,8 +87,6 @@ func (b *Bundle) ServerTLS(tb testing.TB) *tls.Config {
 	}
 }
 
-// ClientTLS returns a client configuration trusting the CA and presenting
-// the client certificate.
 func (b *Bundle) ClientTLS(tb testing.TB) *tls.Config {
 	tb.Helper()
 	cert, err := tls.X509KeyPair(b.ClientCertPEM, b.ClientKeyPEM)

@@ -17,13 +17,11 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache"
 )
 
-// User is the example value type.
 type User struct {
 	ID   int64  `json:"id" msgpack:"id"`
 	Name string `json:"name" msgpack:"name"`
 }
 
-// manualClock is a Clock advanced by hand.
 type manualClock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -45,7 +43,7 @@ func (m *manualClock) Advance(d time.Duration) {
 
 func loadUser(id int64) cache.LoadFunc[User] {
 	return func(context.Context) (User, error) {
-		return User{ID: id, Name: "Ada"}, nil // read from the primary database
+		return User{ID: id, Name: "Ada"}, nil
 	}
 }
 
@@ -70,7 +68,7 @@ func ExampleCache_GetOrLoad() {
 		return User{ID: 1, Name: "Ada"}, nil
 	}
 	_, _ = users.GetOrLoad(ctx, "user:1", load)
-	u, _ := users.GetOrLoad(ctx, "user:1", load) // cached
+	u, _ := users.GetOrLoad(ctx, "user:1", load)
 	fmt.Println(u.Name, calls)
 	// Output: Ada 1
 }
@@ -176,7 +174,7 @@ func ExampleWithStaleIfError() {
 	defer users.Close()
 	ctx := context.Background()
 	_, _ = users.GetOrLoad(ctx, "user:1", loadUser(1))
-	clk.Advance(time.Minute) // expired
+	clk.Advance(time.Minute)
 	u, err := users.GetOrLoad(ctx, "user:1", func(context.Context) (User, error) {
 		return User{}, errors.New("database unreachable")
 	})
@@ -184,28 +182,23 @@ func ExampleWithStaleIfError() {
 	// Output: Ada <nil>
 }
 
-// ExampleWithL2 shows the wiring of the Redis tier. It has no Output
-// comment, so it is compiled but not run (it would need a Redis server).
 func ExampleWithL2() {
-	// A single node; redis.NewClusterClient and redis.NewFailoverClient
-	// (Sentinel) work the same, and so does NewUniversalClient.
 	rdb := redis.NewUniversalClient(&redis.UniversalOptions{Addrs: []string{"localhost:6379"}})
-	defer rdb.Close() // the cache never closes the client
+	defer rdb.Close()
 
 	users, err := cache.New[User]("users", cache.JSONCodec[User](),
 		cache.WithL2(rdb),
 		cache.WithTTL(10*time.Minute, time.Minute),
-		cache.WithDegradedL1TTL(5*time.Second), // also bounds dead bus link detection
+		cache.WithDegradedL1TTL(5*time.Second),
 	)
 	if err != nil {
 		panic(err)
 	}
-	defer users.Close() // stops the bus subscriber and maintenance goroutines
+	defer users.Close()
 
 	ctx := context.Background()
 	u, err := users.GetOrLoad(ctx, "user:42", loadUser(42))
 	fmt.Println(u.Name, err)
-	// Invalidate everywhere: L2 generation, then every instance's L1 via the bus.
 	if err := users.Delete(ctx, "user:42"); errors.Is(err, cache.ErrDeferred) {
 		fmt.Println("Redis unreachable: invalidation queued for replay")
 	}
@@ -230,7 +223,6 @@ func ExampleWithDegradedL1TTL() {
 }
 
 func ExampleWithMaxPendingInvalidations() {
-	// 0: Delete fails instead of deferring while Redis is unreachable.
 	_, err := cache.New[User]("users", cache.JSONCodec[User](), cache.WithMaxPendingInvalidations(0))
 	fmt.Println(err)
 	// Output: <nil>

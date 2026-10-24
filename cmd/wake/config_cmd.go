@@ -14,8 +14,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/cdcsource"
 )
 
-// loadConfig assembles the configuration from the file, WAKE_* env vars and
-// defaults. Every failure maps to exit code 2.
 func loadConfig(path string, skipValidate bool) (config.Config, error) {
 	cfg, err := config.LoadWith(config.Options{Path: path, Env: os.LookupEnv, SkipValidate: skipValidate})
 	if err != nil {
@@ -54,11 +52,6 @@ func newConfigValidateCmd(cfgPath *string) *cobra.Command {
 	}
 }
 
-// validateInvalidatorTemplates runs the validate_dsn_env check of `wake
-// cache-invalidator` for `wake config validate`: only when the
-// cache_invalidator section is configured; checkInvalidatorTemplates skips
-// it, with a warning, while the variable is unset. A rejection is a
-// configuration error (exit 2, template_requires_full_identity).
 func validateInvalidatorTemplates(ctx context.Context, cfg *config.Config, env invalEnv) error {
 	if !cfg.CacheInvalidator.Configured() {
 		return nil

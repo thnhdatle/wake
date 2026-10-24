@@ -49,7 +49,6 @@ func newSnapshotTableCmd(cfgPath *string) *cobra.Command {
 	}
 }
 
-// emitTrigger writes the wake.snapshot message and returns its LSN.
 func emitTrigger(ctx context.Context, dsn string, payload []byte) (string, error) {
 	pool, err := pgsql.NewPool(dsn, pgsql.WithMaxConns(1), pgsql.WithApplicationName(appName))
 	if err != nil {
@@ -67,8 +66,6 @@ func emitTrigger(ctx context.Context, dsn string, payload []byte) (string, error
 	return at.String(), nil
 }
 
-// requireSourceName checks the source.name a command needs when the rest of
-// the configuration is not validated.
 func requireSourceName(cfg *config.Config) error {
 	if cfg.Source.Name == "" {
 		return &exitError{code: exitConfig, err: withCode(codeConfigInvalid,

@@ -13,7 +13,6 @@ import (
 	"github.com/thnhdatle/wake/internal/adapter/pgsql"
 )
 
-// errCheckFailed reports that `wake check` found a failing check.
 var errCheckFailed = errors.New("pre-flight checks failed")
 
 func newCheckCmd(cfgPath *string) *cobra.Command {
@@ -57,7 +56,6 @@ func newCheckCmd(cfgPath *string) *cobra.Command {
 	}
 }
 
-// printReport writes one line per finding, then its tables indented.
 func printReport(w io.Writer, r *pgsql.Report) {
 	for _, f := range r.Findings {
 		code := ""

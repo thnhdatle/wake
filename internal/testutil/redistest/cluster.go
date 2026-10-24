@@ -13,15 +13,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// clusterPorts are the node ports inside the container; each node's
-// cluster bus uses port+10000 on the container's loopback.
 var clusterPorts = [...]string{"7000", "7001", "7002"}
 
 const clusterReady = "WAKE-CLUSTER-READY"
 
-// clusterScript starts three cluster-enabled nodes announcing 127.0.0.1,
-// creates a 3-master cluster without replicas and waits until every node
-// reports cluster_state:ok.
 const clusterScript = `set -e
 for p in 7000 7001 7002; do
   redis-server --port $p --cluster-enabled yes --cluster-config-file /tmp/nodes-$p.conf \
@@ -41,13 +36,11 @@ exec tail -f /dev/null
 
 // Cluster is a 3-master Redis Cluster in one container.
 type Cluster struct {
-	ctr *testcontainers.DockerContainer
-	// hostAddr maps a node port inside the container to its published
-	// host:port; written once by StartCluster.
+	ctr      *testcontainers.DockerContainer
 	hostAddr map[string]string
 }
 
-// StartCluster starts the cluster; it is terminated when tb ends.
+// StartCluster starts the cluster and terminates it when tb ends.
 func StartCluster(tb testing.TB) *Cluster {
 	tb.Helper()
 	exposed := make([]string, 0, len(clusterPorts))
@@ -72,7 +65,6 @@ func StartCluster(tb testing.TB) *Cluster {
 	return c
 }
 
-// dial maps an announced node address (127.0.0.1:700x) to its host port.
 func (c *Cluster) dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -86,8 +78,6 @@ func (c *Cluster) dial(ctx context.Context, network, addr string) (net.Conn, err
 	return d.DialContext(ctx, network, target)
 }
 
-// Options returns cluster client options (short timeouts, no retries)
-// seeded with the announced node addresses and the mapping Dialer.
 func (c *Cluster) Options() *redis.ClusterOptions {
 	base := clientOptions(c.dial)
 	addrs := make([]string, 0, len(clusterPorts))
@@ -105,8 +95,6 @@ func (c *Cluster) Options() *redis.ClusterOptions {
 	}
 }
 
-// Client returns a cluster client built from Options; it is closed when tb
-// ends.
 func (c *Cluster) Client(tb testing.TB) *redis.ClusterClient {
 	tb.Helper()
 	rdb := redis.NewClusterClient(c.Options())

@@ -9,26 +9,17 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/change"
 )
 
-// maxIntervalDigits bounds each interval field so that it fits an int64.
 const maxIntervalDigits = 18
 
-// intervalParts holds an interval as Postgres prints it in IntervalStyle
-// postgres: signed year, month and day fields and one signed time of day
-// whose hours may exceed 24.
 type intervalParts struct {
 	year, month, day int64
 	hour             int64
 	minute, second   int
-	frac             []byte // digits after '.', trailing zeros removed
+	frac             []byte
 	negTime          bool
-	seen             [4]bool // year, month, day, time
+	seen             [4]bool
 }
 
-// appendInterval converts interval output in IntervalStyle postgres (for
-// example "1 year 2 mons -3 days +04:05:06.5") to an ISO 8601 duration with
-// individually signed components, exactly as Postgres prints it under
-// IntervalStyle iso_8601 ("P1Y2M-3DT4H5M6.5S"). Output already in ISO 8601
-// form is passed through.
 func appendInterval(dst []byte, typeOID uint32, text []byte) ([]byte, error) {
 	switch string(text) {
 	case "infinity", "-infinity":
@@ -69,8 +60,6 @@ func parseInterval(s []byte) (intervalParts, bool) {
 	return p, p.seen != [4]bool{}
 }
 
-// nextToken returns the next space-delimited token of s and the remainder
-// after the delimiting space.
 func nextToken(s []byte) (tok, rest []byte) {
 	if i := bytes.IndexByte(s, ' '); i >= 0 {
 		return s[:i], s[i+1:]
@@ -97,7 +86,6 @@ func (p *intervalParts) setField(unit []byte, v int64) bool {
 	return true
 }
 
-// parseTime reads "[+-]h+:mm:ss[.f+]".
 func (p *intervalParts) parseTime(tok []byte) bool {
 	if len(tok) > 0 && (tok[0] == '+' || tok[0] == '-') {
 		p.negTime = tok[0] == '-'
@@ -176,8 +164,6 @@ func appendField(dst []byte, v int64, designator byte) []byte {
 	return append(strconv.AppendInt(dst, v, 10), designator)
 }
 
-// isISODuration accepts the character set and shape of ISO 8601 durations
-// as Postgres prints them under IntervalStyle iso_8601.
 func isISODuration(s []byte) bool {
 	if len(s) < 3 || s[0] != 'P' {
 		return false

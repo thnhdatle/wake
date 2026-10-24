@@ -11,9 +11,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// BenchmarkRecords_Build turns one accepted event into its Kafka record
-// without a broker: the unit Send queues, the records prepare builds and the
-// partition the partitioner picks (6 partitions, as in the throughput acceptance test).
 func BenchmarkRecords_Build(b *testing.B) {
 	payload := `"` + strings.Repeat("x", 168) + `"`
 	cases := []struct {

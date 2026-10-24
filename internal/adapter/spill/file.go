@@ -17,24 +17,21 @@ import (
 )
 
 const (
-	headerSize = 4
-	bufSize    = 64 << 10
-	// MaxRecordSize is the largest record a frame can hold.
+	headerSize    = 4
+	bufSize       = 64 << 10
 	MaxRecordSize = math.MaxUint32
 )
 
-// File is one spill file. Append, Replay, Size and Remove are safe for
-// concurrent use; Replay reads the frames appended before it started and
-// does not hold the file lock while it calls fn.
+// File is one spill file of length-prefixed records.
 type File struct {
 	path  string
 	store *Store
 
-	mu      sync.Mutex // protects every field below
+	mu      sync.Mutex
 	f       *os.File
 	w       *bufio.Writer
-	written int64 // bytes in the file including frame headers
-	size    int64 // record bytes appended, the value of Size
+	written int64
+	size    int64
 	removed bool
 }
 
@@ -44,7 +41,6 @@ func newFile(f *os.File, path string, store *Store) *File {
 	return &File{path: path, store: store, f: f, w: bufio.NewWriterSize(f, bufSize)}
 }
 
-// invalidate closes the file after the store deleted it.
 func (f *File) invalidate() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -54,10 +50,9 @@ func (f *File) invalidate() {
 	}
 }
 
-// Path returns the file's path.
 func (f *File) Path() string { return f.path }
 
-// Append writes rec as one frame. The bytes may stay buffered until Replay.
+// Append writes one record to the file.
 func (f *File) Append(ctx context.Context, rec []byte) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("append to %s: %w", f.path, err)
@@ -83,10 +78,7 @@ func (f *File) Append(ctx context.Context, rec []byte) error {
 	return nil
 }
 
-// Replay flushes pending frames and calls fn with every record in append
-// order, stopping at the first error from fn, which it returns. The slice
-// passed to fn is only valid during the call. A truncated or oversized frame
-// returns ErrCorrupt.
+// Replay calls fn for each record in order.
 func (f *File) Replay(ctx context.Context, fn func(rec []byte) error) error {
 	f.mu.Lock()
 	if f.removed {
@@ -121,8 +113,6 @@ func (f *File) Replay(ctx context.Context, fn func(rec []byte) error) error {
 	return nil
 }
 
-// readFrame reads one frame, reusing buf for the record, given the bytes
-// that remain in the file.
 func readFrame(r io.Reader, buf []byte, remaining int64) (rec, grown []byte, err error) {
 	var hdr [headerSize]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
@@ -143,8 +133,6 @@ func readFrame(r io.Reader, buf []byte, remaining int64) (rec, grown []byte, err
 	return buf, buf, nil
 }
 
-// frameError reports a short read as corruption (the file is shorter than
-// its own bookkeeping) and any other read error as is.
 func frameError(what string, err error) error {
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return fmt.Errorf("%w: truncated %s", ErrCorrupt, what)
@@ -152,14 +140,12 @@ func frameError(what string, err error) error {
 	return fmt.Errorf("read %s: %w", what, err)
 }
 
-// Size returns the record bytes appended so far, without frame headers.
 func (f *File) Size() int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.size
 }
 
-// Remove closes and deletes the file. A second call returns ErrRemoved.
 func (f *File) Remove() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

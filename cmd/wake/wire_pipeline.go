@@ -18,9 +18,6 @@ import (
 	"github.com/thnhdatle/wake/internal/app/stream"
 )
 
-// wirePipeline connects to the source, runs the startup checks and the
-// publication step, then the startup procedure (snapshot.Prepare) and wires
-// every component in the order of the snapshot package documentation.
 func wirePipeline(ctx context.Context, w *wiring) (*service, error) {
 	cfg := &w.cfg
 	col, err := newCollectors(w.reg)
@@ -51,8 +48,6 @@ func wirePipeline(ctx context.Context, w *wiring) (*service, error) {
 	return s, nil
 }
 
-// startup runs the pre-flight checks and the publication step, then builds
-// the runtime components.
 func (s *service) startup(ctx context.Context, w *wiring, resolver *liveResolver, col *collectors) error {
 	report, err := runChecks(ctx, s.src, s.cfg, resolver)
 	if err != nil {
@@ -95,7 +90,6 @@ func (s *service) startup(ctx context.Context, w *wiring, resolver *liveResolver
 	return nil
 }
 
-// runtimeDeps are the startup outputs build needs.
 type runtimeDeps struct {
 	publications []string
 	tables       *snapshot.CatalogTables
@@ -103,10 +97,7 @@ type runtimeDeps struct {
 	col          *collectors
 }
 
-// build runs the startup procedure and constructs the pipeline: Prepare →
-// StateKeeper → Schemas → AckTracker → Router → StatusUpdater → Initial
-// (only with an initial snapshot) → Snapshotter → Heartbeat → Reader → lag
-// Monitor.
+// build runs the startup procedure and constructs the pipeline components.
 func (s *service) build(ctx context.Context, w *wiring, rt *runtimeDeps) error {
 	cfg := s.cfg
 	store, err := statefile.New(cfg.State.Path)
@@ -136,7 +127,6 @@ func (s *service) build(ctx context.Context, w *wiring, rt *runtimeDeps) error {
 	return nil
 }
 
-// buildStream constructs the components after Prepare.
 func (s *service) buildStream(rt *runtimeDeps, store *statefile.Store, chunks *pgsql.ChunkReader) error {
 	router, schemas, err := s.buildCore(store)
 	if err != nil {
@@ -152,8 +142,6 @@ func (s *service) buildStream(rt *runtimeDeps, store *statefile.Store, chunks *p
 	return s.buildMonitor(rt.col)
 }
 
-// buildCore constructs the state keeper, schema registry, ack tracker,
-// router and standby status updater.
 func (s *service) buildCore(store *statefile.Store) (*stream.Router, *stream.Schemas, error) {
 	var err error
 	if s.keeper, err = snapshot.NewStateKeeper(store, &s.plan.State); err != nil {
@@ -184,9 +172,6 @@ func (s *service) buildCore(store *statefile.Store) (*stream.Router, *stream.Sch
 	return router, schemas, nil
 }
 
-// buildSnapshot constructs the initial snapshot (when Prepare planned one),
-// the table snapshotter and the heartbeat, and returns the reader options
-// that connect them.
 func (s *service) buildSnapshot(router *stream.Router, schemas *stream.Schemas, rt *runtimeDeps,
 	chunks *pgsql.ChunkReader,
 ) ([]stream.ReaderOption, error) {
@@ -214,8 +199,6 @@ func (s *service) buildSnapshot(router *stream.Router, schemas *stream.Schemas, 
 	if err != nil {
 		return nil, err
 	}
-	// The nonce is a ULID per process: watermarks left by a crashed process
-	// carry another one and are ignored.
 	s.snap, err = snapshot.NewSnapshotter(snapshot.SnapshotterDeps{
 		Keeper: s.keeper, Chunks: chunks, Emitter: emitter, Tables: rt.tables, Versions: schemas, Clock: s.clk,
 	}, snapshot.SnapshotterConfig{
@@ -232,8 +215,6 @@ func (s *service) buildSnapshot(router *stream.Router, schemas *stream.Schemas, 
 	return append(opts, stream.WithObserver(s.snap), stream.WithActivity(s.heartbeat)), nil
 }
 
-// buildReader constructs the stream reader; its spill store deletes the
-// spill files of a crashed run when the reader starts.
 func (s *service) buildReader(router *stream.Router, schemas *stream.Schemas, rt *runtimeDeps,
 	opts []stream.ReaderOption,
 ) error {
@@ -253,8 +234,6 @@ func (s *service) buildReader(router *stream.Router, schemas *stream.Schemas, rt
 	return err
 }
 
-// buildMonitor constructs the lag monitor; the alert notifier exists only
-// when lag.alert_webhook is set.
 func (s *service) buildMonitor(col *collectors) error {
 	lc := s.cfg.Lag
 	reporters := make([]lag.SinkHealthReporter, len(s.sinks))

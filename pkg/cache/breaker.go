@@ -12,9 +12,6 @@ const (
 	probeInterval    = time.Second
 )
 
-// breaker is the L2 circuit breaker: it opens after breakerThreshold
-// consecutive failures; while it is not closed no caller touches L2 and the
-// maintenance goroutine probes every probeInterval (half-open).
 type breaker struct {
 	state    atomic.Int32
 	failures atomic.Int32
@@ -28,7 +25,6 @@ func (b *breaker) success() {
 	}
 }
 
-// failure counts a failure and reports whether it opened the breaker.
 func (b *breaker) failure() bool {
 	if b.failures.Add(1) < breakerThreshold {
 		return false

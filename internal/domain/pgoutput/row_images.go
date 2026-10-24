@@ -9,38 +9,15 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// RowImages are the CDC event row images of one Insert, Update or Delete.
 type RowImages struct {
-	Op change.Op
-	// Key holds the key columns in key order; nil for keyless tables.
-	Key change.Row
-	// Before is nil for inserts. For updates and deletes it holds every
-	// column of an 'O' tuple (REPLICA IDENTITY FULL), otherwise only the
-	// replica identity columns.
-	Before change.Row
-	// After is nil for deletes.
-	After change.Row
-	// Unchanged lists columns omitted from After because Postgres sent an
-	// unchanged-TOAST marker; always empty under REPLICA IDENTITY FULL.
+	Op        change.Op
+	Key       change.Row
+	Before    change.Row
+	After     change.Row
 	Unchanged []string
 }
 
-// RowImages converts an Insert, Update or Delete to CDC event row images using the
-// cached relation ("before" and TOAST rules, key rule):
-//
-//   - Key: the key columns (KeyColumns) of the new row for c and u, of the
-//     old tuple for d. When an update's new key value is an unchanged-TOAST
-//     marker, the old key tuple's value is used.
-//   - Before (u, d): every column of an 'O' tuple; the replica identity
-//     columns of a 'K' tuple; for an update without old tuple (key
-//     unchanged) the replica identity columns of the new row. An update of
-//     a REPLICA IDENTITY FULL table without 'O' tuple is ErrMissingOldTuple.
-//   - After (c, u): the new row. An unchanged-TOAST column is copied from
-//     the 'O' tuple under REPLICA IDENTITY FULL, otherwise omitted and
-//     listed in Unchanged.
-//
-// Column values are compact JSON per schema.AppendJSON; they live in one
-// buffer per call and do not alias the message.
+// RowImages returns the before and after rows of a change message.
 func (d *Decoder) RowImages(m Message) (RowImages, error) {
 	var (
 		oid    uint32
@@ -66,23 +43,16 @@ func (d *Decoder) RowImages(m Message) (RowImages, error) {
 	}
 	b := newImageBuilder(e, tuples, d.cells)
 	img, err := build(b)
-	// The cell scratch is reused by the next call; clearing it drops the
-	// references to this call's value buffer.
 	clear(b.scratch)
 	d.cells = b.scratch[:0]
 	return img, err
 }
 
-// cell is one converted column value; unchanged marks a 'u' column.
 type cell struct {
 	value     []byte
 	unchanged bool
 }
 
-// imageBuilder builds the row images of one RowImages call. Column values
-// are appended to buf and row images are carved from cols, so a call
-// allocates two buffers whatever the column count; scratch holds the
-// converted cells, which nothing returned refers to.
 type imageBuilder struct {
 	e       *relationEntry
 	buf     []byte
@@ -100,14 +70,10 @@ func newImageBuilder(e *relationEntry, tuples []Tuple, scratch []cell) *imageBui
 	return &imageBuilder{e: e, buf: make([]byte, 0, size+size/4), scratch: scratch[:0]}
 }
 
-// reserveRows allocates the column arena for rows of n columns in total.
 func (b *imageBuilder) reserveRows(n int) {
 	b.cols = make([]change.Column, 0, n)
 }
 
-// newRow returns an empty, non-nil row with room for n columns, carved
-// from the arena (or allocated when the arena is short). Its capacity is
-// capped, so appending past n never overwrites another row.
 func (b *imageBuilder) newRow(n int) change.Row {
 	if n == 0 {
 		return change.Row{}
@@ -120,7 +86,6 @@ func (b *imageBuilder) newRow(n int) change.Row {
 	return b.cols[start : start : start+n]
 }
 
-// newCells returns n zeroed cells from the scratch.
 func (b *imageBuilder) newCells(n int) []cell {
 	start := len(b.scratch)
 	if cap(b.scratch)-start < n {
@@ -134,7 +99,6 @@ func (b *imageBuilder) newCells(n int) []cell {
 	return out
 }
 
-// keyLen is the number of key columns, zero for keyless tables.
 func (b *imageBuilder) keyLen() int {
 	if b.e.keyless() {
 		return 0
@@ -142,8 +106,6 @@ func (b *imageBuilder) keyLen() int {
 	return len(b.e.key)
 }
 
-// beforeLen bounds the columns of a before image built from an old tuple
-// of kind k.
 func (b *imageBuilder) beforeLen(k OldKind) int {
 	if k == OldFull {
 		return len(b.e.rel.Columns)
@@ -155,7 +117,6 @@ func (b *imageBuilder) columnError(sentinel error, col int) error {
 	return fmt.Errorf("%w: %s column %q", sentinel, b.e.rel.QualifiedName(), b.e.rel.Columns[col].Name)
 }
 
-// cells converts a tuple's values to JSON.
 func (b *imageBuilder) cells(t Tuple) ([]cell, error) {
 	cols := b.e.rel.Columns
 	if len(t) != len(cols) {
@@ -187,7 +148,6 @@ func (b *imageBuilder) cells(t Tuple) ([]cell, error) {
 	return out, nil
 }
 
-// rowAll builds a row image of every column, skipping unchanged cells.
 func (b *imageBuilder) rowAll(cells []cell) change.Row {
 	row := b.newRow(len(cells))
 	for i := range cells {
@@ -198,7 +158,6 @@ func (b *imageBuilder) rowAll(cells []cell) change.Row {
 	return row
 }
 
-// rowOf builds a row image of the columns idx, skipping unchanged cells.
 func (b *imageBuilder) rowOf(cells []cell, idx []int) change.Row {
 	row := b.newRow(len(idx))
 	for _, i := range idx {
@@ -209,9 +168,6 @@ func (b *imageBuilder) rowOf(cells []cell, idx []int) change.Row {
 	return row
 }
 
-// required builds a row image from the columns idx, taking a column from
-// fallback (when not nil) if it is unchanged in cells; a value still
-// missing is ErrUnchangedKey.
 func (b *imageBuilder) required(cells, fallback []cell, idx []int) (change.Row, error) {
 	row := b.newRow(len(idx))
 	for _, i := range idx {
@@ -290,9 +246,6 @@ func (b *imageBuilder) update(m *Update) (RowImages, error) {
 	return img, nil
 }
 
-// resolveUnchanged applies the TOAST rule to the new row: under FULL
-// identity (copyFromOld) an unchanged value is copied from the old row;
-// otherwise the column stays unchanged and its name is returned.
 func (b *imageBuilder) resolveUnchanged(newCells, oldCells []cell, copyFromOld bool) ([]string, error) {
 	full := b.e.rel.Identity == schema.IdentityFull
 	var unchanged []string

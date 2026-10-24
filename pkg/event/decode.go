@@ -8,10 +8,8 @@ import (
 )
 
 const (
-	// nullLiteral is the JSON null token.
 	nullLiteral = "null"
 
-	// JSON member names of the three payload kinds.
 	fieldType          = "type"
 	fieldID            = "id"
 	fieldSource        = "source"
@@ -29,9 +27,6 @@ const (
 	fieldContent       = "content_base64"
 )
 
-// probe decodes data as a JSON object of raw members and checks that every
-// name in required is present and every name in nonNull is also not null. An
-// empty input is a Kafka tombstone value.
 func probe(data []byte, required, nonNull []string) error {
 	if IsKafkaTombstone(data) {
 		return ErrTombstone
@@ -56,7 +51,6 @@ func probe(data []byte, required, nonNull []string) error {
 	return nil
 }
 
-// unmarshal decodes data into v, wrapping failures in ErrInvalid.
 func unmarshal(data []byte, v any) error {
 	if err := json.Unmarshal(data, v); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)
@@ -64,7 +58,6 @@ func unmarshal(data []byte, v any) error {
 	return nil
 }
 
-// checkCommon validates the fields shared by all event kinds.
 func checkCommon(lsn string, tsMs, schemaVersion int64, src Source) error {
 	if _, err := ParseLSN(lsn); err != nil {
 		return err

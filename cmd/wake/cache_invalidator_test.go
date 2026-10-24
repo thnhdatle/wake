@@ -28,7 +28,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/cdcsource"
 )
 
-// invalClosedAddr returns a loopback address nothing listens on.
 func invalClosedAddr(t *testing.T) string {
 	t.Helper()
 	var lc net.ListenConfig
@@ -46,7 +45,6 @@ func invalWriteFile(t *testing.T, name, content string) string {
 	return path
 }
 
-// invalKafkaYAML is a valid kafka cache_invalidator section.
 func invalKafkaYAML(broker, redisAddr string) string {
 	return fmt.Sprintf(`cache_invalidator:
   source: kafka
@@ -76,12 +74,10 @@ func invalNATSYAML(url, redisAddr string) string {
 `, url, redisAddr)
 }
 
-// invalGetenv returns a getenv over vars.
 func invalGetenv(vars map[string]string) func(string) string {
 	return func(k string) string { return vars[k] }
 }
 
-// invalLogBuffer is a concurrency-safe log destination.
 type invalLogBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -239,7 +235,6 @@ func TestInvalidatorRedisOptions(t *testing.T) {
 	}
 }
 
-// invalAdminGet issues GET http://addr+path and returns status and body.
 func invalAdminGet(t *testing.T, addr, path string) (int, string) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, http.NoBody)
@@ -254,8 +249,6 @@ func invalAdminGet(t *testing.T, addr, path string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-// invalStart runs the command in-process on a loopback admin listener and
-// returns the admin address and a stop function returning Run's error.
 func invalStart(t *testing.T, yaml string, vars map[string]string, logs io.Writer) (addr string, stop func() error) {
 	t.Helper()
 	path := invalWriteFile(t, "wake.yaml", yaml)
@@ -279,7 +272,6 @@ func invalStart(t *testing.T, yaml string, vars map[string]string, logs io.Write
 	return ln.Addr().String(), stop
 }
 
-// invalReadyz returns the failing checks of /readyz by name (code).
 func invalReadyz(t *testing.T, addr string) (int, map[string]string) {
 	t.Helper()
 	status, body := invalAdminGet(t, addr, "/readyz")
@@ -343,7 +335,6 @@ func TestCacheInvalidator_RunsDegraded(t *testing.T) {
 	}
 }
 
-// invalFakeSource delivers one batch and then waits; it is always healthy.
 type invalFakeSource struct{ batch [][]byte }
 
 func (s invalFakeSource) Consume(ctx context.Context, handle cdcsource.Handler) error {
@@ -367,7 +358,6 @@ func TestInvalidatorReadiness_FullIdentity(t *testing.T) {
 	t.Parallel()
 	m, err := cdcsource.NewMapping(map[string][]string{"public.users": {"user:{id}", "user:email:{email}"}})
 	require.NoError(t, err)
-	// An update under the default replica identity: before has the key only.
 	update := []byte(`{"id":"0/16B3800-0","source":{"db":"app","schema":"public","table":"users"},"op":"u",` +
 		`"ts_ms":1760600001000,"lsn":"0/16B3800","tx_id":7813,"key":{"id":42},"before":{"id":42},` +
 		`"after":{"id":42,"email":"b@example.com"},"schema_version":3}`)

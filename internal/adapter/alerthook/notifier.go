@@ -17,12 +17,9 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Timeouts of one alert POST.
 const (
 	DefaultTimeout = 5 * time.Second
-	// MaxTimeout caps WithTimeout so a slow receiver cannot stall the lag
-	// monitor for a large part of lag.interval.
-	MaxTimeout = 5 * time.Second
+	MaxTimeout     = 5 * time.Second
 )
 
 const (
@@ -30,7 +27,7 @@ const (
 	maxDrain  = 64 << 10
 )
 
-// Notifier posts alert state changes. It is safe for concurrent use.
+// Notifier posts alert state changes to the configured webhook.
 type Notifier struct {
 	url    string
 	client *http.Client
@@ -38,7 +35,6 @@ type Notifier struct {
 
 var _ pipeline.AlertNotifier = (*Notifier)(nil)
 
-// Option configures a Notifier.
 type Option func(*options)
 
 type options struct {
@@ -46,16 +42,11 @@ type options struct {
 	transport http.RoundTripper
 }
 
-// WithTimeout bounds one POST (default DefaultTimeout); it must lie in
-// (0, MaxTimeout].
 func WithTimeout(d time.Duration) Option { return func(o *options) { o.timeout = d } }
 
-// WithTransport replaces the HTTP transport (default: a dedicated
-// http.Transport with TLS 1.2 or later and system roots).
 func WithTransport(rt http.RoundTripper) Option { return func(o *options) { o.transport = rt } }
 
-// New validates the http or https URL of lag.alert_webhook. It starts
-// nothing.
+// New returns a Notifier for the given webhook URL.
 func New(rawURL string, opts ...Option) (*Notifier, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -90,7 +81,6 @@ func New(rawURL string, opts ...Option) (*Notifier, error) {
 	}, nil
 }
 
-// payload is the alert body.
 type payload struct {
 	Rule      string  `json:"rule"`
 	State     string  `json:"state"`
@@ -99,9 +89,7 @@ type payload struct {
 	Ts        string  `json:"ts"`
 }
 
-// Notify implements pipeline.AlertNotifier: one POST of
-// {"rule","state","value","threshold","ts"} with ts in RFC 3339 (UTC). It
-// returns a *StatusError for a non-2xx response.
+// Notify posts one alert to the webhook and returns an error on a transport failure or non-2xx response.
 func (n *Notifier) Notify(ctx context.Context, a pipeline.Alert) error {
 	body, err := json.Marshal(payload{
 		Rule: a.Rule, State: string(a.State), Value: a.Value, Threshold: a.Threshold,
@@ -128,12 +116,8 @@ func (n *Notifier) Notify(ctx context.Context, a pipeline.Alert) error {
 	return nil
 }
 
-// CloseIdleConnections closes the transport's idle connections, at
-// shutdown.
 func (n *Notifier) CloseIdleConnections() { n.client.CloseIdleConnections() }
 
-// stripURL drops the *url.Error wrapper, whose message repeats the URL and
-// so possibly a token in its query.
 func stripURL(err error) error {
 	var ue *url.Error
 	if errors.As(err, &ue) {

@@ -18,54 +18,35 @@ import (
 	"github.com/thnhdatle/wake/internal/config"
 )
 
-// conn is the part of nats.go the sink uses; unit tests replace it.
 type conn interface {
-	// publish publishes msg asynchronously with Nats-Msg-Id id and the
-	// sink's expected stream; nats.go's own retry on no responders is off,
-	// so only the sink re-publishes and the order holds.
 	publish(msg *nats.Msg, id string) (ackFuture, error)
-	// epoch counts the connections made so far; it changes when the
-	// client reconnects.
 	epoch() uint64
-	// maxPayload is the server's max_payload, 0 before the first connect.
 	maxPayload() int64
-	// state reports whether the connection is up and its last error.
 	state() (connected bool, lastErr error)
-	// ensureStream creates the stream or adds the subject and duplicate
-	// window to an existing one.
 	ensureStream(ctx context.Context, spec streamSpec) error
-	// streamExists checks the stream (nats.create_stream false).
 	streamExists(ctx context.Context, name string) error
 	close()
 }
 
-// ackFuture is jetstream.PubAckFuture's result side.
 type ackFuture interface {
 	Ok() <-chan *jetstream.PubAck
 	Err() <-chan error
 }
 
-// streamSpec is the stream the sink creates or updates.
 type streamSpec struct {
 	name    string
-	subject string // <subject_prefix>.>
+	subject string
 	window  time.Duration
 }
 
-// dialer connects; the production dialer is dialNATS.
 type dialer func(s *Sink) (conn, error)
 
-// natsConn is the production conn.
 type natsConn struct {
 	nc     *nats.Conn
 	js     jetstream.JetStream
 	stream string
 }
 
-// dialNATS connects with unlimited reconnects, no reconnect buffer (a
-// publish while disconnected fails at once instead of being replayed
-// behind newer messages), and retries on a failed first connect. It returns
-// before the server is reachable.
 func dialNATS(s *Sink) (conn, error) {
 	opts := []nats.Option{
 		nats.Name("wake-" + s.name),
@@ -169,9 +150,6 @@ func (c *natsConn) streamExists(ctx context.Context, name string) error {
 
 func (c *natsConn) close() { c.nc.Close() }
 
-// loadTLS builds the client TLS configuration from nats.tls: ca_file
-// replaces the system roots, cert_file and key_file present a client
-// certificate.
 func loadTLS(c config.TLS) (*tls.Config, error) {
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 	if c.CAFile != "" {

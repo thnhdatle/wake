@@ -8,19 +8,12 @@ import (
 	"strconv"
 )
 
-// StoredValue is the L2 value record {gen, expires_at, payload}.
-//
-// Stored form, written by the scripts as one Redis string so Lua can compare
-// the generation as a string without parsing numbers:
-//
-//	<gen>|<expires_at_ms>|<payload>
 type StoredValue struct {
 	Gen         uint64
 	ExpiresAtMS int64
 	Payload     []byte
 }
 
-// EncodeValue returns the stored form of v.
 func EncodeValue(v StoredValue) []byte {
 	b := make([]byte, 0, len(v.Payload)+40)
 	b = strconv.AppendUint(b, v.Gen, 10)
@@ -30,7 +23,6 @@ func EncodeValue(v StoredValue) []byte {
 	return append(b, v.Payload...)
 }
 
-// DecodeValue parses the stored form. The payload aliases b.
 func DecodeValue(b []byte) (StoredValue, error) {
 	genText, rest, ok1 := bytes.Cut(b, []byte(sep))
 	expText, payload, ok2 := bytes.Cut(rest, []byte(sep))

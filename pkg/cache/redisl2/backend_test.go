@@ -20,8 +20,6 @@ import (
 
 var errOffline = errors.New("offline")
 
-// offlineClient is a client whose every dial fails at once (no network);
-// dials counts the attempts.
 func offlineClient(t *testing.T, dials *atomic.Int32) *redis.Client {
 	t.Helper()
 	rdb := redis.NewClient(&redis.Options{
@@ -60,9 +58,6 @@ func TestNew_ValidatesConfig(t *testing.T) {
 	}
 }
 
-// TestBackend_Offline covers the unreachable server: New succeeds, every
-// command fails with ErrUnavailable, the bus keeps retrying without ever
-// reporting a connection, and Close stops it (goleak in TestMain).
 func TestBackend_Offline(t *testing.T) {
 	t.Parallel()
 	var dials atomic.Int32
@@ -106,7 +101,7 @@ func TestBackend_Offline(t *testing.T) {
 	}
 
 	require.Positive(t, dials.Load())
-	for range 10 { // the bus keeps retrying in the background (backoff >= 25 ms)
+	for range 10 {
 		waitCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		_, err := b.Receive(waitCtx)
 		cancel()

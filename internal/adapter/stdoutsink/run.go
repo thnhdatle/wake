@@ -12,9 +12,7 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Run writes queued records until ctx ends and returns nil, or
-// ErrAlreadyRunning on a second call. A batch interrupted by ctx is not
-// acknowledged.
+// Run writes queued events in order until ctx is canceled.
 func (s *Sink) Run(ctx context.Context) error {
 	if !s.started.CompareAndSwap(false, true) {
 		return ErrAlreadyRunning
@@ -28,9 +26,6 @@ func (s *Sink) Run(ctx context.Context) error {
 	}
 }
 
-// collect waits for a record, then gathers more until max_events or
-// max_bytes is reached or, with linger, the linger time has passed; without
-// linger it takes what is already queued.
 func (s *Sink) collect(ctx context.Context) ([]pipeline.Record, bool) {
 	var batch []pipeline.Record
 	select {
@@ -67,8 +62,6 @@ func (s *Sink) collect(ctx context.Context) ([]pipeline.Record, bool) {
 	return batch, true
 }
 
-// write writes the batch as JSON lines and flushes, retrying until it
-// succeeds or ctx ends, then acknowledges every record.
 func (s *Sink) write(ctx context.Context, batch []pipeline.Record) {
 	s.buf = s.buf[:0]
 	for i := range batch {
@@ -118,7 +111,6 @@ func (s *Sink) write(ctx context.Context, batch []pipeline.Record) {
 	s.obs.ObserveAcked(s.name, len(batch))
 }
 
-// flush flushes the writer if it buffers.
 func (s *Sink) flush() error {
 	f, ok := s.out.(interface{ Flush() error })
 	if !ok {

@@ -8,32 +8,22 @@ import (
 	"strings"
 )
 
-// messageType is the value of the "type" member of forwarded logical messages.
 const messageType = "message"
 
-// Message is a forwarded Postgres logical message (api/schema/
-// logical-message.v1.json, outside the CDC event contract). Its JSON form carries "type":
-// "message" and the content as the base64 string "content_base64".
+// Message is a forwarded Postgres logical message.
 type Message struct {
 	// ID has the form "<lsn>-m<n>".
 	ID string `json:"id"`
-	// LSN is the commit LSN for transactional messages, the message LSN
-	// otherwise.
-	LSN string `json:"lsn"`
-	// TsMs is the time in Unix milliseconds.
-	TsMs int64 `json:"ts_ms"`
-	// Transactional tells whether the message was emitted inside a transaction.
-	Transactional bool `json:"transactional"`
-	// Prefix is the message prefix.
-	Prefix string `json:"prefix"`
-	// Content is the decoded message payload.
-	Content []byte `json:"content_base64"`
+	// LSN is the commit LSN for transactional messages, the message LSN otherwise.
+	LSN           string `json:"lsn"`
+	TsMs          int64  `json:"ts_ms"`
+	Transactional bool   `json:"transactional"`
+	Prefix        string `json:"prefix"`
+	Content       []byte `json:"content_base64"`
 }
 
-// messageAlias drops the methods of Message to avoid recursion.
 type messageAlias Message
 
-// messageWire is the JSON form: the alias plus the constant type member.
 type messageWire struct {
 	Type string `json:"type"`
 	messageAlias
@@ -46,8 +36,7 @@ var (
 	messageNonNull = messageRequired
 )
 
-// DecodeMessage decodes and validates a forwarded logical message. Errors
-// follow the rules of Decode; content_base64 must be valid standard base64.
+// DecodeMessage decodes and validates a forwarded logical message.
 func DecodeMessage(data []byte) (*Message, error) {
 	if err := probe(data, messageRequired, messageNonNull); err != nil {
 		return nil, err
@@ -66,7 +55,6 @@ func DecodeMessage(data []byte) (*Message, error) {
 	return &m, nil
 }
 
-// validate checks the id and the shared fields.
 func (m *Message) validate() error {
 	lsn, n, ok := strings.Cut(m.ID, "-m")
 	if !ok {
@@ -87,10 +75,10 @@ func (m *Message) validate() error {
 	return nil
 }
 
-// MarshalJSON encodes the message with its "type": "message" member.
+// MarshalJSON encodes the message with its type member.
 func (m Message) MarshalJSON() ([]byte, error) {
 	if m.Content == nil {
-		m.Content = []byte{} // encode as "" rather than null
+		m.Content = []byte{}
 	}
 	b, err := json.Marshal(messageWire{Type: messageType, messageAlias: messageAlias(m)})
 	if err != nil {

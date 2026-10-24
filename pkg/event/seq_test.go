@@ -84,7 +84,6 @@ func TestCompare_Table(t *testing.T) {
 	}
 }
 
-// genSeq draws sequences from a small space so that ties are frequent.
 func genSeq() *rapid.Generator[event.Seq] {
 	return rapid.Custom(func(rt *rapid.T) event.Seq {
 		return event.Seq{
@@ -124,8 +123,6 @@ func TestCompare_NumericLSNProperty(t *testing.T) {
 		if a.LSN == b.LSN {
 			return
 		}
-		// Round-trip through the textual form: ordering must follow the number,
-		// not the string.
 		pa, err := event.ParseLSN(event.FormatLSN(a.LSN))
 		require.NoError(rt, err)
 		pb, err := event.ParseLSN(event.FormatLSN(b.LSN))

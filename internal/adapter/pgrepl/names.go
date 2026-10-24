@@ -11,12 +11,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// maxIdentifierBytes is Postgres' NAMEDATALEN - 1.
 const maxIdentifierBytes = 63
 
-// ValidateSlotName checks a replication slot name: 1 to 63 characters of
-// [a-z0-9_] (the Postgres slot name rule, which also makes it safe to embed
-// in replication commands).
 func ValidateSlotName(name string) error {
 	if name == "" || len(name) > maxIdentifierBytes {
 		return fmt.Errorf("%w: slot name %q must have 1 to %d characters", ErrInvalidArgument, name, maxIdentifierBytes)
@@ -30,12 +26,6 @@ func ValidateSlotName(name string) error {
 	return nil
 }
 
-// startCommand builds the START_REPLICATION command:
-//
-//	START_REPLICATION SLOT <slot> LOGICAL <lsn> (proto_version '1',
-//	publication_names '"a","b"', messages 'true')
-//
-// Publication names are quoted as identifiers inside the string literal.
 func startCommand(opts *pipeline.StartOptions) (string, error) {
 	if err := ValidateSlotName(opts.Slot); err != nil {
 		return "", err
@@ -67,7 +57,6 @@ func startCommand(opts *pipeline.StartOptions) (string, error) {
 	return b.String(), nil
 }
 
-// quoteLiteral quotes s as a standard SQL string literal.
 func quoteLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

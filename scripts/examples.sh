@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Runs every examples/<name>/run.sh and compares stdout with
-# examples/<name>/expected_output.txt when that file exists.
+# Runs every examples/<name>/run.sh and compares stdout with expected_output.txt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

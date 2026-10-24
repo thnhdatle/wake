@@ -11,11 +11,7 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Run dispatches queued records as batches until ctx ends: at most one
-// batch per lane in flight, each delivered by its own goroutine, which Run
-// waits for before returning. Batches still in flight when ctx ends are not
-// acknowledged (at-least-once: they are delivered again after a restart).
-// Run returns nil when ctx ends, or ErrAlreadyRunning on a second call.
+// Run delivers queued events until ctx is canceled.
 func (s *Sink) Run(ctx context.Context) error {
 	if !s.started.CompareAndSwap(false, true) {
 		return ErrAlreadyRunning
@@ -42,9 +38,6 @@ func (s *Sink) Run(ctx context.Context) error {
 	}
 }
 
-// ready takes every batch the scheduler can hand out now, or returns how
-// long the oldest queued record may still linger. Batches leave before
-// linger has passed once max_events records or max_bytes are queued.
 func (s *Sink) ready() ([]pipeline.LaneBatch, time.Duration) {
 	s.mu.Lock()
 	if s.sched.Len() == 0 {
@@ -87,16 +80,14 @@ func (s *Sink) lingerLeft() time.Duration {
 	return s.linger - s.clock.Now().Sub(s.firstQueued)
 }
 
-// delivery is one batch being delivered; only its goroutine touches it.
 type delivery struct {
 	batch   pipeline.LaneBatch
 	id      string
 	body    []byte
-	poison  int // poison responses so far
+	poison  int
 	blocked bool
 }
 
-// deliver retries the batch until it is acknowledged or ctx ends.
 func (s *Sink) deliver(ctx context.Context, b pipeline.LaneBatch) {
 	d := &delivery{batch: b, body: encodeBody(b.Records)}
 	for attempt := 0; ; attempt++ {
@@ -117,7 +108,6 @@ func (s *Sink) deliver(ctx context.Context, b pipeline.LaneBatch) {
 	}
 }
 
-// encodeBody returns the JSON array of the records' payloads.
 func encodeBody(recs []pipeline.Record) []byte {
 	n := 2
 	for i := range recs {
@@ -134,7 +124,6 @@ func encodeBody(recs []pipeline.Record) []byte {
 	return append(body, ']')
 }
 
-// complete releases the batch's lane and wakes the dispatcher.
 func (s *Sink) complete(ctx context.Context, d *delivery) {
 	s.mu.Lock()
 	err := s.sched.Complete(d.batch)
@@ -149,8 +138,6 @@ func (s *Sink) complete(ctx context.Context, d *delivery) {
 	s.wake()
 }
 
-// ack acknowledges every record of the batch; delivered records also feed
-// the end-to-end latency.
 func (s *Sink) ack(ctx context.Context, d *delivery, delivered bool) {
 	recs := d.batch.Records
 	for i := range recs {

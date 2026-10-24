@@ -2,15 +2,12 @@
 
 package pgoutput
 
-// Delete is a removed row; Old is the 'K' (replica identity) or 'O' (whole
-// row, REPLICA IDENTITY FULL) tuple.
 type Delete struct {
 	RelationOID uint32
 	OldKind     OldKind
 	Old         Tuple
 }
 
-// MessageType implements Message.
 func (*Delete) MessageType() MessageType { return MessageDelete }
 
 func parseDelete(r *reader) *Delete {

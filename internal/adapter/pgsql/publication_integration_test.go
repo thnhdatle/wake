@@ -40,7 +40,6 @@ func policy(t *testing.T, emitUnkeyed bool) *pipeline.TablePolicy {
 	return p
 }
 
-// pubTables lists the tables directly in a publication.
 func pubTables(t *testing.T, conn *pgx.Conn, pub string) []string {
 	t.Helper()
 	rows, err := conn.Query(context.Background(), `SELECT pr.prrelid::regclass::text FROM pg_publication_rel pr
@@ -91,7 +90,6 @@ func TestPublications_EnsureManaged_NeverPublishesKeylessTables(t *testing.T) {
 	conn := db.Conn(t)
 	assert.Equal(t, []string{"full_nopk", "keyed", "parted"}, pubTables(t, conn, "wake_app"))
 	assert.Equal(t, "insert,update,delete,truncate,viaroot", pubFlags(t, conn, "wake_app"))
-	// The application's UPDATE and DELETE on the keyless table keep working.
 	db.Exec(t, `INSERT INTO keyless VALUES (1, 'a'); UPDATE keyless SET b = 'b'; DELETE FROM keyless`)
 	db.Exec(t, `INSERT INTO keyed VALUES (1, 'a'); UPDATE keyed SET v = 'b'; DELETE FROM keyed`)
 
@@ -99,7 +97,6 @@ func TestPublications_EnsureManaged_NeverPublishesKeylessTables(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, again.Changes, "a second run changes nothing")
 
-	// A table that loses its key leaves wake_app at the next refresh.
 	db.Exec(t, `ALTER TABLE full_nopk REPLICA IDENTITY DEFAULT`)
 	res, err = pubs.EnsureManaged(ctx, pgsql.ManagedConfig{Source: "app", Resolver: policy(t, false)})
 	require.NoError(t, err)
@@ -142,7 +139,6 @@ func TestPublications_EnsureManaged_EmitUnkeyedUsesInsertPublication(t *testing.
 	assert.Equal(t, "public.keyed", rel.QualifiedName(), "updates and deletes of the keyless table are not captured")
 	assert.JSONEq(t, `{"id":7}`, rowJSON(img.Key))
 
-	// A keyless table that gains a key moves to wake_app.
 	db.Exec(t, `ALTER TABLE keyless ADD PRIMARY KEY (a)`)
 	res, err = pubs.EnsureManaged(ctx, cfg)
 	require.NoError(t, err)
@@ -251,7 +247,6 @@ func TestPublications_InspectExisting_ReportsKeylessAndLeafPartitions(t *testing
 	assert.False(t, ex.Exists)
 }
 
-// prober is a ReplicationProber with a fixed answer.
 type prober struct {
 	info pipeline.SystemInfo
 	err  error
@@ -346,8 +341,6 @@ func TestPublications_EnsureManaged_DropsTableThatLosesItsKeyDuringSync(t *testi
 	ctx := testCtx(t)
 	db := srv.NewDatabase(t)
 	db.Exec(t, `CREATE TABLE racy (id int CONSTRAINT racy_pkey PRIMARY KEY, v text)`)
-	// X drops the key but stays open: the sync reads racy as keyed, then its
-	// ADD TABLE waits for X's lock; X commits while it waits.
 	x, err := db.Conn(t).Begin(ctx)
 	require.NoError(t, err)
 	_, err = x.Exec(ctx, `ALTER TABLE racy DROP CONSTRAINT racy_pkey`)

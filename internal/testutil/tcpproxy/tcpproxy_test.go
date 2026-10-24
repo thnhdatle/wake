@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-// echoServer answers every line with the same line prefixed by tag.
 func echoServer(t *testing.T, tag string) string {
 	t.Helper()
 	var lc net.ListenConfig

@@ -45,7 +45,6 @@ func testCtx(t *testing.T) context.Context {
 	return ctx
 }
 
-// stream receives and decodes pgoutput messages, answering keepalives.
 type stream struct {
 	t    *testing.T
 	conn *pgrepl.Conn
@@ -57,7 +56,6 @@ func newStream(t *testing.T, c *pgrepl.Conn) *stream {
 	return &stream{t: t, conn: c, dec: pgoutput.NewDecoder()}
 }
 
-// next returns the next decoded pgoutput message.
 func (s *stream) next(ctx context.Context) pgoutput.Message {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
@@ -80,8 +78,6 @@ func (s *stream) next(ctx context.Context) pgoutput.Message {
 	}
 }
 
-// nextRow skips to the next Insert, Update or Delete and returns its row
-// images.
 func (s *stream) nextRow(ctx context.Context) pgoutput.RowImages {
 	s.t.Helper()
 	for {
@@ -95,7 +91,6 @@ func (s *stream) nextRow(ctx context.Context) pgoutput.RowImages {
 	}
 }
 
-// nextCommit skips to the next Commit.
 func (s *stream) nextCommit(ctx context.Context) *pgoutput.Commit {
 	s.t.Helper()
 	for {
@@ -186,8 +181,6 @@ func TestConn_CreateSlot_ExportedSnapshotImportedBeforeStart(t *testing.T) {
 	require.NotEmpty(t, slot.SnapshotName)
 	require.NotZero(t, slot.ConsistentPoint)
 
-	// A change committed after the consistent point is invisible to the
-	// exported snapshot and arrives through the stream.
 	db.Exec(t, `INSERT INTO items VALUES (4, 'v4')`)
 	session := db.Conn(t)
 	tx, err := session.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -244,7 +237,6 @@ func TestConn_Receive_DecodesInsertUpdateDelete(t *testing.T) {
 	assert.Equal(t, []string{"id"}, rel.KeyColumnNames())
 	img := s.nextRow(ctx)
 	assert.Equal(t, change.OpCreate, img.Op)
-	// TimeZone=UTC and IntervalStyle=postgres session settings.
 	assert.JSONEq(t, `{"id":1,"v":"a","at":"2026-10-18T10:34:56.5+00:00","d":"P1DT2H"}`, rowJSON(img.After))
 	commit := s.nextCommit(ctx)
 	assert.Equal(t, begin.FinalLSN, commit.CommitLSN)
@@ -283,8 +275,6 @@ func TestConn_SendStandbyStatus_AdvancesConfirmedFlushWhileReceiveBlocks(t *test
 	s := newStream(t, c)
 	commit := s.nextCommit(ctx)
 
-	// Block a reader in Receive on an idle stream, then send the status
-	// from this goroutine.
 	readCtx, stopRead := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	var readErr error
@@ -311,7 +301,6 @@ func TestConn_SendStandbyStatus_AdvancesConfirmedFlushWhileReceiveBlocks(t *test
 	wg.Wait()
 	require.ErrorIs(t, readErr, context.Canceled)
 
-	// The connection stays usable after the canceled Receive.
 	db.Exec(t, `INSERT INTO items VALUES (2)`)
 	img := s.nextRow(ctx)
 	assert.JSONEq(t, `{"id":2}`, rowJSON(img.After))
@@ -327,8 +316,6 @@ func TestConn_Receive_KeepaliveReplyKeepsStreamAlive(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.StartReplication(ctx, startOpts("wake_keepalive", slot.ConsistentPoint, "pub")))
 
-	// Without replies the walsender ends the stream after 2s; answering the
-	// requested replies keeps it alive well beyond that.
 	replies := 0
 	until := time.Now().Add(5 * time.Second)
 	for time.Now().Before(until) {
@@ -375,7 +362,6 @@ func TestConn_StartReplication_SecondConsumerIsSlotInUse(t *testing.T) {
 
 	err = second.DropSlot(ctx, "wake_busy")
 	require.ErrorIs(t, err, pgrepl.ErrSlotInUse)
-	// The failed commands leave the second connection usable.
 	_, err = second.IdentifySystem(ctx)
 	require.NoError(t, err)
 }
@@ -421,9 +407,6 @@ func TestConn_Lifecycle_StateErrors(t *testing.T) {
 	require.NoError(t, c.Close(ctx))
 }
 
-// TestConn_StartReplication_InvalidatedSlotIsSlotInvalidated is not
-// parallel: it lowers max_slot_wal_keep_size server-wide, which would
-// invalidate the slots of concurrently running tests.
 func TestConn_StartReplication_InvalidatedSlotIsSlotInvalidated(t *testing.T) { //nolint:paralleltest // see above
 	ctx := testCtx(t)
 	db := srv.NewDatabase(t)

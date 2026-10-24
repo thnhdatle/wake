@@ -184,7 +184,7 @@ func ExampleParseSeq() {
 func ExampleCompare() {
 	a, _ := event.ParseSeq("0/A-0")
 	b, _ := event.ParseSeq("0/9-0")
-	fmt.Println(event.Compare(a, b)) // numeric, although "0/A" < "0/9" as strings is false
+	fmt.Println(event.Compare(a, b))
 
 	schema, _ := event.ParseSeq("0/A-s0")
 	fmt.Println(event.Compare(schema, a))

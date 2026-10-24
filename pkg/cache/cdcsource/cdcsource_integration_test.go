@@ -26,23 +26,17 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache"
 )
 
-// Integration tests: CDC events written to Kafka or NATS (as Wake writes
-// them) → Invalidator → cache.Delete on real Redis → the keys disappear from
-// the L1 of three other cache instances.
-
 const (
-	// wait bounds every wait on a container.
 	wait     = 90 * time.Second
 	pollTick = 20 * time.Millisecond
 )
 
 func uniqueName(prefix string) string {
 	var b [4]byte
-	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails (Go >= 1.24)
+	_, _ = rand.Read(b[:])
 	return prefix + "_" + hex.EncodeToString(b[:])
 }
 
-// waitUntil polls cond until it holds, failing after wait.
 func waitUntil(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(wait)
@@ -56,9 +50,6 @@ func waitUntil(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// cluster is one cache namespace: a deleter instance (the invalidator's) and
-// three reader instances, each with its own Redis client like separate
-// processes.
 type cluster struct {
 	deleter cache.Cache[string]
 	readers []cache.Cache[string]
@@ -77,8 +68,6 @@ func newCluster(t *testing.T, ns string, client func() redis.UniversalClient) *c
 	for range 3 {
 		cl.readers = append(cl.readers, open())
 	}
-	// Warm-up (M7): every reader must observe a probe invalidation, which
-	// proves its bus subscription is live.
 	waitUntil(t, "readers observe a probe invalidation", func() bool {
 		cl.warm(t, "probe")
 		require.NoError(t, cl.deleter.Delete(t.Context(), "probe"))
@@ -87,7 +76,6 @@ func newCluster(t *testing.T, ns string, client func() redis.UniversalClient) *c
 	return cl
 }
 
-// warm loads keys into every reader.
 func (c *cluster) warm(t *testing.T, keys ...string) {
 	t.Helper()
 	for _, r := range c.readers {
@@ -99,7 +87,6 @@ func (c *cluster) warm(t *testing.T, keys ...string) {
 	}
 }
 
-// cachedBy counts the readers that still serve key.
 func (c *cluster) cachedBy(key string) int {
 	n := 0
 	for _, r := range c.readers {
@@ -119,7 +106,6 @@ func (c *cluster) cachedAny(keys ...string) bool {
 	return false
 }
 
-// runInvalidator runs an invalidator over src until the test ends.
 func runInvalidator(t *testing.T, src Source, m *Mapping, del Deleter, reg prometheus.Registerer) *Invalidator {
 	t.Helper()
 	inv, err := New(src, m, del, WithMetrics(reg), WithRetry(50*time.Millisecond, 500*time.Millisecond),
@@ -135,7 +121,6 @@ func runInvalidator(t *testing.T, src Source, m *Mapping, del Deleter, reg prome
 	return inv
 }
 
-// testWriter sends log lines to the test log.
 type testWriter struct{ t *testing.T }
 
 func (w testWriter) Write(p []byte) (int, error) {
@@ -143,8 +128,6 @@ func (w testWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// userEvents returns, for users 1..n, an update that changed the e-mail
-// address (full identity) and the keys it must invalidate.
 func userEvents(n int) (payloads [][]byte, keys []string) {
 	for i := 1; i <= n; i++ {
 		payloads = append(payloads, evt("u", "public.users", fmt.Sprintf(`{"id":%d}`, i),
@@ -164,7 +147,6 @@ func produce(t *testing.T, cl *kgo.Client, topic string, payloads ...[]byte) {
 	}
 }
 
-// committed sums the offsets group committed on topic.
 func committed(t *testing.T, k *kafkatest.Kafka, group, topic string) int64 {
 	t.Helper()
 	resps, err := k.Admin(t).FetchOffsets(t.Context(), group)
@@ -177,10 +159,6 @@ func committed(t *testing.T, k *kafkatest.Kafka, group, topic string) int64 {
 	return sum
 }
 
-// TestIntegration_Kafka runs one TLS + SCRAM broker for its subtests, one
-// after the other (no t.Parallel): Kafka is the largest container, and the
-// outage subtest stops the shared Redis.
-//
 //nolint:paralleltest,tparallel // see above
 func TestIntegration_Kafka(t *testing.T) {
 	user := kafkatest.User{Name: "inval", Password: "secret42"}
@@ -209,7 +187,6 @@ func TestIntegration_Kafka(t *testing.T) {
 		reg := prometheus.NewRegistry()
 		inv := runInvalidator(t, kafkaSource(t, prefix, group, m), m, cl.deleter, reg)
 
-		// A tombstone follows each delete on the topic; it is skipped.
 		produce(t, k.Client(t), topic, append(payloads, nil)...)
 
 		waitUntil(t, "keys gone from every reader", func() bool { return !cl.cachedAny(keys...) })
@@ -273,7 +250,6 @@ func TestIntegration_NATS(t *testing.T) {
 		_, perr := js.Publish(t.Context(), "cdc.public.users", p, jetstream.WithMsgID(fmt.Sprintf("0/1-%d", i)))
 		require.NoError(t, perr)
 	}
-	// Another table's subject is not consumed.
 	_, err = js.Publish(t.Context(), "cdc.public.orders", evt("c", "public.orders", `{"id":1}`, "null", `{"id":1}`))
 	require.NoError(t, err)
 
@@ -288,8 +264,6 @@ func TestIntegration_NATS(t *testing.T) {
 	waitUntil(t, "source healthy", func() bool { return inv.Ready(t.Context()) == nil })
 }
 
-// TestIntegration_TLSRedis checks pkg/cache and the invalidator over a
-// TLS-only Redis that requires client certificates.
 func TestIntegration_TLSRedis(t *testing.T) {
 	t.Parallel()
 	srv := redistest.StartTLS(t)

@@ -10,9 +10,9 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Notifier is the fake. It is safe for concurrent use.
+// Notifier is an in-memory alert notifier.
 type Notifier struct {
-	mu     sync.Mutex // protects every field below
+	mu     sync.Mutex
 	alerts []pipeline.Alert
 	err    error
 }
@@ -20,7 +20,6 @@ type Notifier struct {
 // New returns a notifier without alerts.
 func New() *Notifier { return &Notifier{} }
 
-// Notify records a, or returns the injected error without recording it.
 func (n *Notifier) Notify(_ context.Context, a pipeline.Alert) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -31,14 +30,12 @@ func (n *Notifier) Notify(_ context.Context, a pipeline.Alert) error {
 	return nil
 }
 
-// Fail makes Notify return err; nil restores it.
 func (n *Notifier) Fail(err error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.err = err
 }
 
-// Alerts returns the recorded alerts in order.
 func (n *Notifier) Alerts() []pipeline.Alert {
 	n.mu.Lock()
 	defer n.mu.Unlock()

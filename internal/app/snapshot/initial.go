@@ -15,54 +15,35 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// TxOpener registers a transaction with the stream's ack tracker and
-// returns it unsealed; stream.Router implements it.
 type TxOpener interface {
 	OpenTx(ctx context.Context, commit, end lsn.LSN, readAt time.Time) (pipeline.HeldTx, error)
 }
 
-// VersionSource returns a table's current schema version; stream.Schemas
-// implements it.
 type VersionSource interface {
 	Version(table string) uint64
 }
 
-// InitialDeps are the initial snapshot's dependencies.
 type InitialDeps struct {
 	Keeper   *StateKeeper
 	Opener   TxOpener
 	Versions VersionSource
 	Clock    clock.Clock
 	Logger   *slog.Logger
-	// Metrics is optional.
-	Metrics Metrics
+	Metrics  Metrics
 }
 
-// Initial copies the tables of the initial snapshot at the slot's exported
-// snapshot. Each worker owns one session opened by Prepare
-// and copies whole tables in keyset chunks of the run's chunk_rows; chunk
-// counters are allocated and persisted before each chunk is emitted. The
-// `r` events (id <consistent point>-r<run>-<n>, lsn the consistent point,
-// ts_ms the persisted clock_timestamp, no tx_id) are routed into the
-// pseudo-transaction at the consistent point, one completion group per
-// chunk, registered in the ack tracker before any stream transaction.
-//
-// Initial implements stream.Gate: Released is closed once every row was
-// routed and the pseudo-transaction sealed, so the stream's events follow
-// the snapshot's on every sink. Progress (last acknowledged key per table)
-// is persisted as chunks complete; Done is closed once every table is
-// acknowledged and the run removed from the state.
+// Initial copies the tables of the initial snapshot at the slot's exported snapshot.
 type Initial struct {
 	deps     InitialDeps
 	setup    *InitialSetup
 	released chan struct{}
 	done     chan struct{}
 
-	mu       sync.Mutex // protects progress
+	mu       sync.Mutex
 	progress []*chunkProgress
 }
 
-// NewInitial validates the dependencies. setup comes from Prepare.
+// NewInitial validates the dependencies.
 func NewInitial(deps InitialDeps, setup *InitialSetup) (*Initial, error) {
 	if deps.Keeper == nil || deps.Opener == nil || deps.Versions == nil || deps.Clock == nil || deps.Logger == nil {
 		return nil, fmt.Errorf("%w: nil initial snapshot dependency", ErrInvalidOption)
@@ -76,15 +57,11 @@ func NewInitial(deps InitialDeps, setup *InitialSetup) (*Initial, error) {
 	return &Initial{deps: deps, setup: setup, released: make(chan struct{}), done: make(chan struct{})}, nil
 }
 
-// Released implements stream.Gate.
 func (in *Initial) Released() <-chan struct{} { return in.released }
 
-// Done returns a channel closed once the initial snapshot is acknowledged
-// and finished; table snapshots wait for it.
 func (in *Initial) Done() <-chan struct{} { return in.done }
 
-// Run copies the tables, releases the stream, waits for the
-// acknowledgements and finishes the run. It returns nil when ctx ends.
+// Run copies the tables, releases the stream and waits for the acknowledgements.
 func (in *Initial) Run(ctx context.Context) error {
 	err := in.run(ctx)
 	if ctx.Err() != nil {
@@ -120,8 +97,6 @@ func (in *Initial) run(ctx context.Context) error {
 	return nil
 }
 
-// finishAll waits for the acknowledgements of every table concurrently,
-// persisting each table's progress as its chunks complete.
 func (in *Initial) finishAll(ctx context.Context) error {
 	errs := make([]error, len(in.progress))
 	var wg sync.WaitGroup
@@ -136,7 +111,6 @@ func (in *Initial) finishAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// copyAll runs one worker per session over the table queue.
 func (in *Initial) copyAll(ctx context.Context, pseudo pipeline.HeldTx) error {
 	queue := make(chan Table, len(in.setup.Tables))
 	for _, t := range in.setup.Tables {

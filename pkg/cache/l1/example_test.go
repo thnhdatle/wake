@@ -9,7 +9,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/l1"
 )
 
-// fixedClock is a Clock frozen at a given instant.
 type fixedClock struct{ now time.Time }
 
 func (f *fixedClock) Now() time.Time { return f.now }
@@ -45,7 +44,7 @@ func ExampleWithClock() {
 func ExampleWithJitter() {
 	clk := &fixedClock{now: time.Unix(0, 0)}
 	c, _ := l1.New[int](100, 1<<20, l1.WithClock(clk), l1.WithJitter(10*time.Second, 1))
-	c.Set("a", l1.Entry[int]{Value: 1, TTL: time.Minute}) // lives between 50 s and 60 s
+	c.Set("a", l1.Entry[int]{Value: 1, TTL: time.Minute})
 	clk.now = clk.now.Add(50 * time.Second)
 	_, fresh := c.Get("a")
 	clk.now = clk.now.Add(10 * time.Second)
@@ -56,8 +55,8 @@ func ExampleWithJitter() {
 
 func ExampleCache_Token() {
 	c, _ := l1.New[string](100, 1<<20)
-	tok := c.Token("user:1") // before reading the lower tier
-	c.Delete("user:1")       // an invalidation arrives meanwhile
+	tok := c.Token("user:1")
+	c.Delete("user:1")
 	stored := c.SetIfUnchanged(tok, "user:1", l1.Entry[string]{Value: "old"})
 	fmt.Println(stored)
 	// Output: false
@@ -103,7 +102,7 @@ func ExampleCache_GetStale() {
 func ExampleCache_Set() {
 	c, _ := l1.New[string](100, 1<<20)
 	c.Set("a", l1.Entry[string]{Value: "v2", Version: 2})
-	ok := c.Set("a", l1.Entry[string]{Value: "v1", Version: 1}) // older version
+	ok := c.Set("a", l1.Entry[string]{Value: "v1", Version: 1})
 	v, _ := c.Get("a")
 	fmt.Println(ok, v)
 	// Output: false v2
@@ -112,7 +111,7 @@ func ExampleCache_Set() {
 func ExampleCache_Invalidate() {
 	c, _ := l1.New[string](100, 1<<20)
 	c.Set("a", l1.Entry[string]{Value: "v", Version: 7})
-	c.Invalidate("a", 7) // the entry is at least as new: kept
+	c.Invalidate("a", 7)
 	_, kept := c.Get("a")
 	c.Invalidate("a", 8)
 	_, after := c.Get("a")

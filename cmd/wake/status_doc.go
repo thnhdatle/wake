@@ -9,23 +9,16 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// statusDoc is the GET /v1/status document (api/openapi.yaml Status) and the
-// output of `wake status`.
 type statusDoc struct {
-	// Origin is "admin" when served by the running instance and
-	// "state_file" for the `wake status` fallback.
-	Origin string  `json:"origin"`
-	Source string  `json:"source"`
-	Slot   slotDoc `json:"slot"`
-	// ConfirmedLSN is the ack tracker's confirmed LSN (admin) or the slot's
-	// confirmed_flush_lsn (fallback).
-	ConfirmedLSN  string          `json:"confirmed_lsn"`
-	StatusSentLSN string          `json:"status_sent_lsn,omitempty"`
-	Replication   *replicationDoc `json:"replication,omitempty"`
-	Snapshot      snapshotDoc     `json:"snapshot"`
-	Sinks         []sinkDoc       `json:"sinks,omitempty"`
-	// Schemas maps "<schema>.<table>" to the persisted schema version.
-	Schemas map[string]uint64 `json:"schemas"`
+	Origin        string            `json:"origin"`
+	Source        string            `json:"source"`
+	Slot          slotDoc           `json:"slot"`
+	ConfirmedLSN  string            `json:"confirmed_lsn"`
+	StatusSentLSN string            `json:"status_sent_lsn,omitempty"`
+	Replication   *replicationDoc   `json:"replication,omitempty"`
+	Snapshot      snapshotDoc       `json:"snapshot"`
+	Sinks         []sinkDoc         `json:"sinks,omitempty"`
+	Schemas       map[string]uint64 `json:"schemas"`
 }
 
 type slotDoc struct {
@@ -49,7 +42,6 @@ type snapshotDoc struct {
 	Queue           []string `json:"queue"`
 }
 
-// runDoc is a snapshot run without chunk positions (they hold key values).
 type runDoc struct {
 	ID        uint64        `json:"id"`
 	Kind      string        `json:"kind"`
@@ -73,8 +65,6 @@ type sinkDoc struct {
 	Since  *time.Time `json:"since,omitempty"`
 }
 
-// newStatusDoc builds the parts of the status document that come from the
-// slot row and the state file.
 func newStatusDoc(cfg *config.Config, slot pipeline.SlotStatus, slotErr error, st pipeline.State) *statusDoc {
 	doc := &statusDoc{
 		Origin:  "admin",

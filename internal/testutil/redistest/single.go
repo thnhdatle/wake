@@ -17,17 +17,15 @@ import (
 
 const singlePort = "6379/tcp"
 
-// Single is a single-node Redis container. DEBUG is enabled (Freeze) and
-// the default save points are kept, so Stop persists the dataset and Start
-// reloads it.
+// Single is a single-node Redis container.
 type Single struct {
 	ctr *testcontainers.DockerContainer
 
-	mu   sync.Mutex // protects addr
-	addr string     // current host:port
+	mu   sync.Mutex
+	addr string
 }
 
-// StartSingle starts a single node; it is terminated when tb ends.
+// StartSingle starts a single node and terminates it when tb ends.
 func StartSingle(tb testing.TB) *Single {
 	tb.Helper()
 	ctr := startContainer(tb,
@@ -53,7 +51,6 @@ func (s *Single) refresh(tb testing.TB) {
 	s.mu.Unlock()
 }
 
-// Addr returns the current host:port of the server.
 func (s *Single) Addr() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -65,21 +62,17 @@ func (s *Single) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 	return d.DialContext(ctx, network, s.Addr())
 }
 
-// Options returns client options (short timeouts, no retries) whose Dialer
-// follows the server across restarts.
 func (s *Single) Options() *redis.Options {
 	opt := clientOptions(s.dial)
-	opt.Addr = "redis:6379" // informational: the Dialer decides
+	opt.Addr = "redis:6379"
 	return opt
 }
 
-// Client returns a client built from Options; it is closed when tb ends.
 func (s *Single) Client(tb testing.TB) *redis.Client {
 	tb.Helper()
 	return newClient(tb, s.Options())
 }
 
-// Stop stops the container (SIGTERM; Redis saves and exits).
 func (s *Single) Stop(tb testing.TB) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
@@ -90,8 +83,6 @@ func (s *Single) Stop(tb testing.TB) {
 	}
 }
 
-// Start starts a stopped container again and waits until it answers; its
-// published port may have changed, which Options' Dialer follows.
 func (s *Single) Start(tb testing.TB) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
@@ -105,16 +96,12 @@ func (s *Single) Start(tb testing.TB) {
 	waitPing(tb, rdb)
 }
 
-// Freeze blocks the server for d with DEBUG SLEEP: connections stay open
-// but nothing is answered, like a paused process or a silent network
-// partition. The returned channel receives the DEBUG SLEEP result once the
-// server is responsive again; tb's cleanup waits for it too.
 func (s *Single) Freeze(tb testing.TB, d time.Duration) <-chan error {
 	tb.Helper()
 	opt := s.Options()
 	opt.ReadTimeout = d + 30*time.Second
 	rdb := redis.NewClient(opt)
-	waitPing(tb, rdb) // the sleep starts only on an established connection
+	waitPing(tb, rdb)
 	done := make(chan error, 1)
 	result := make(chan error, 1)
 	go func() {

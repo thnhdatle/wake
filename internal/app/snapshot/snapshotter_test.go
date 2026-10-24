@@ -21,7 +21,6 @@ import (
 
 const testNonce = "01JABCDEFGHJKMNPQRSTVWXY10"
 
-// visibleSnapshot sees every xid of the fake stream (100..).
 var visibleSnapshot = pipeline.TxSnapshot{XMin: 1000, XMax: 1000}
 
 type snapFixture struct {
@@ -55,7 +54,6 @@ func newSnapFixture(t *testing.T, st pipeline.State, opts ...SnapshotterOption) 
 	return f
 }
 
-// start runs the snapshotter until the test ends.
 func (f *snapFixture) start(t *testing.T) <-chan error {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -133,9 +131,6 @@ func TestNewSnapshotter_Invalid(t *testing.T) {
 	assert.Equal(t, DefaultChunkRows, s.cfg.ChunkRows)
 }
 
-// TestSnapshotter_Run_QueuedTable runs a queued table in a new run: per
-// chunk LOW, read, HIGH; `r` events at the HIGH LSN with its commit time,
-// n = c × chunk_rows + i; progress persisted; the run removed at the end.
 func TestSnapshotter_Run_QueuedTable(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued("public.a"))
@@ -161,8 +156,6 @@ func TestSnapshotter_Run_QueuedTable(t *testing.T) {
 	assert.Equal(t, uint64(1), f.keeper.State().RunCounter)
 }
 
-// TestSnapshotter_Run_DropsRowsChangedInWindow: a stream change of a chunk
-// key between LOW and HIGH drops the row.
 func TestSnapshotter_Run_DropsRowsChangedInWindow(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued("public.a"))
@@ -170,7 +163,7 @@ func TestSnapshotter_Run_DropsRowsChangedInWindow(t *testing.T) {
 	f.chunks.OnRead(func(n int) {
 		if n == 1 {
 			f.stream.change(ctx, "public.a", `{"id":2}`)
-			f.stream.change(ctx, "public.b", `{"id":1}`) // another table: no effect
+			f.stream.change(ctx, "public.b", `{"id":1}`)
 		}
 	})
 	f.start(t)
@@ -183,9 +176,6 @@ func TestSnapshotter_Run_DropsRowsChangedInWindow(t *testing.T) {
 	assert.Len(t, ids, 4)
 }
 
-// TestSnapshotter_Run_RetriesChunk: a committed xid of the read's snapshot
-// that precedes the run's first LOW and was never fed forces a re-run with a
-// new chunk counter.
 func TestSnapshotter_Run_RetriesChunk(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued("public.a"))
@@ -228,8 +218,6 @@ func TestSnapshotter_Run_InvalidHighSnapshotFails(t *testing.T) {
 	require.ErrorIs(t, <-f.start(t), watermark.ErrInvalidPayload)
 }
 
-// TestSnapshotter_Run_ResumesRun continues an interrupted run from its last
-// acknowledged position under the same run_id and chunk counter.
 func TestSnapshotter_Run_ResumesRun(t *testing.T) {
 	t.Parallel()
 	st := queued()
@@ -256,9 +244,6 @@ func TestSnapshotter_Run_ResumesRun(t *testing.T) {
 	assert.Equal(t, uint64(7), f.keeper.State().RunCounter, "no new run_id")
 }
 
-// TestSnapshotter_Observe_Triggers: wake.snapshot requests queue their
-// table (once per transaction LSN); invalid and uncaptured requests count
-// as "_other".
 func TestSnapshotter_Observe_Triggers(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued())
@@ -290,8 +275,6 @@ func TestSnapshotter_Observe_TriggerSaveError(t *testing.T) {
 	require.ErrorIs(t, err, boom)
 }
 
-// TestSnapshotter_Observe_ForeignWatermarksIgnored: watermarks of another
-// process (crash leftovers) or another run never hold a transaction.
 func TestSnapshotter_Observe_ForeignWatermarksIgnored(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued())
@@ -315,8 +298,6 @@ func TestSnapshotter_Observe_ForeignWatermarksIgnored(t *testing.T) {
 	f.snap.uninstall()
 }
 
-// TestSnapshotter_Observe_HighWithoutLowReportsError: a HIGH whose LOW was
-// not read fails the chunk without holding the transaction.
 func TestSnapshotter_Observe_HighWithoutLowReportsError(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued())
@@ -338,8 +319,6 @@ func TestSnapshotter_Observe_HighWithoutLowReportsError(t *testing.T) {
 	require.ErrorIs(t, res.err, watermark.ErrNoLow)
 }
 
-// TestSnapshotter_Install_WaitsForTransactionBoundary: a merger installed
-// while the reader is inside a transaction takes effect after its Commit.
 func TestSnapshotter_Install_WaitsForTransactionBoundary(t *testing.T) {
 	t.Parallel()
 	f := newSnapFixture(t, queued())

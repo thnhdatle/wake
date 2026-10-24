@@ -20,7 +20,6 @@ import (
 
 var errFakeSealed = errors.New("fake: sealed")
 
-// fakeHeld is a pipeline.HeldTx recording its groups.
 type fakeHeld struct {
 	mu     sync.Mutex
 	commit lsn.LSN
@@ -61,7 +60,6 @@ func (h *fakeHeld) allGroups() []*fakeGroup {
 	return slices.Clone(h.groups)
 }
 
-// records returns the records of every group in routing order.
 func (h *fakeHeld) records() []pipeline.Record {
 	var out []pipeline.Record
 	for _, g := range h.allGroups() {
@@ -70,8 +68,6 @@ func (h *fakeHeld) records() []pipeline.Record {
 	return out
 }
 
-// fakeGroup is a pipeline.TxGroup completed by ack (or at Seal when empty,
-// like the ack tracker).
 type fakeGroup struct {
 	mu       sync.Mutex
 	recs     []pipeline.Record
@@ -122,7 +118,6 @@ func (g *fakeGroup) all() []pipeline.Record {
 	return slices.Clone(g.recs)
 }
 
-// fakeOpener is a TxOpener handing out fakeHeld transactions.
 type fakeOpener struct {
 	mu   sync.Mutex
 	err  error
@@ -150,12 +145,10 @@ func (o *fakeOpener) first(t *testing.T) *fakeHeld {
 	return o.txs[0]
 }
 
-// fixedVersions is a VersionSource.
 type fixedVersions uint64
 
 func (v fixedVersions) Version(string) uint64 { return uint64(v) }
 
-// staticTables is a TableSource.
 type staticTables struct {
 	tables []Table
 	err    error
@@ -163,7 +156,6 @@ type staticTables struct {
 
 func (s staticTables) CapturedTables(context.Context) ([]Table, error) { return s.tables, s.err }
 
-// table returns the captured table public.<name>.
 func table(name string) Table {
 	return Table{
 		Name: "public." + name, Schema: "public", Table: name,
@@ -171,7 +163,6 @@ func table(name string) Table {
 	}
 }
 
-// recMetrics records snapshot metrics.
 type recMetrics struct {
 	mu       sync.Mutex
 	rows     map[string]uint64
@@ -210,7 +201,6 @@ func (m *recMetrics) get() (map[string]uint64, []string, []string) {
 	return rows, slices.Clone(m.requests), slices.Clone(m.retries)
 }
 
-// keeperWith returns a keeper over a fake store holding st.
 func keeperWith(t *testing.T, st pipeline.State) (*StateKeeper, *fakestate.Store) {
 	t.Helper()
 	store := fakestate.NewWith(st)
@@ -219,9 +209,6 @@ func keeperWith(t *testing.T, st pipeline.State) (*StateKeeper, *fakestate.Store
 	return k, store
 }
 
-// fakeStream plays the stream reader synchronously: every emitted message
-// is its own transaction fed to the observer, and transactions the observer
-// holds are handed back as fakeHeld.
 type fakeStream struct {
 	mu       sync.Mutex
 	obs      pipeline.TxObserver
@@ -248,7 +235,6 @@ func (f *fakeStream) next() (uint32, lsn.LSN, error) {
 	return f.xid, f.at, nil
 }
 
-// EmitMessage implements pipeline.MessageEmitter.
 func (f *fakeStream) EmitMessage(ctx context.Context, prefix string, content []byte) (lsn.LSN, error) {
 	xid, at, err := f.next()
 	if err != nil {
@@ -258,7 +244,6 @@ func (f *fakeStream) EmitMessage(ctx context.Context, prefix string, content []b
 	return at, nil
 }
 
-// change commits a transaction changing keys of a table.
 func (f *fakeStream) change(ctx context.Context, table string, keys ...string) {
 	xid, at, _ := f.next()
 	f.tx(ctx, xid, at, func() {
@@ -297,7 +282,6 @@ func (f *fakeStream) heldTxs() []*fakeHeld {
 	return slices.Clone(f.held)
 }
 
-// reads returns the records routed into held transactions.
 func (f *fakeStream) reads() []pipeline.Record {
 	var out []pipeline.Record
 	for _, h := range f.heldTxs() {

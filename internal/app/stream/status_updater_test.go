@@ -17,9 +17,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakerepl"
 )
 
-// handoffConfirmed is a ConfirmedSource whose change signal is unbuffered:
-// a completed send proves that Run received the signal, and a second send
-// proves that Run finished handling the first.
 type handoffConfirmed struct {
 	mu      sync.Mutex
 	l       lsn.LSN
@@ -38,7 +35,6 @@ func (h *handoffConfirmed) Confirmed() lsn.LSN {
 
 func (h *handoffConfirmed) ConfirmedChanged() <-chan struct{} { return h.changed }
 
-// advance sets the confirmed LSN and waits until Run has fully handled it.
 func (h *handoffConfirmed) advance(l lsn.LSN) {
 	h.mu.Lock()
 	h.l = l
@@ -52,8 +48,6 @@ type updaterRun struct {
 	errc   chan error
 }
 
-// startUpdater runs u until the test ends and waits until its ticker is
-// registered on clk.
 func startUpdater(t *testing.T, u *StatusUpdater, clk *clock.Fake) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -216,16 +210,13 @@ func TestStatusUpdater_RequestReply_AnswersAtOnce(t *testing.T) {
 	u, repl, clk := newUpdater(t, newHandoff(100))
 	startUpdater(t, u, clk)
 	u.RequestReply()
-	u.RequestReply() // coalesces, never blocks
+	u.RequestReply()
 	got, err := repl.WaitStatuses(context.Background(), 1)
 	require.NoError(t, err)
 	assert.Equal(t, lsn.LSN(100), got[0].Flushed)
 	assert.Equal(t, epoch, got[0].ClientTime, "no clock advance needed")
 }
 
-// TestStatusUpdater_Run_SendsWhileReceiveBlocked models reading paused for
-// backpressure: the reader is blocked (here in Receive, with nothing to
-// read) and status updates still go out on time.
 func TestStatusUpdater_Run_SendsWhileReceiveBlocked(t *testing.T) {
 	t.Parallel()
 	u, repl, clk := newUpdater(t, newHandoff(100), WithStatusInterval(time.Second))
@@ -249,7 +240,7 @@ func TestStatusUpdater_ObserveReceived(t *testing.T) {
 	t.Parallel()
 	u, repl, _ := newUpdater(t, newHandoff(100))
 	u.ObserveReceived(500)
-	u.ObserveReceived(300) // never moves back
+	u.ObserveReceived(300)
 	require.NoError(t, u.Flush(context.Background()))
 	u.ObserveReceived(50)
 	got := repl.Statuses()
@@ -283,8 +274,6 @@ func TestStatusUpdater_Run_SendError(t *testing.T) {
 	assert.Equal(t, lsn.LSN(100), u.LastSent())
 }
 
-// cancellingSender cancels the run's context and fails, as a send aborted
-// by shutdown does.
 type cancellingSender struct{ cancel context.CancelFunc }
 
 func (c cancellingSender) SendStandbyStatus(_ context.Context, _ pipeline.StandbyStatus) error {

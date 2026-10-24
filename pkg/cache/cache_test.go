@@ -93,8 +93,6 @@ func TestNew_BackendGetsNamespaceChannelAndHealthCheck(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, c.Close())
 	}
-	// The bus health check is half of degraded_l1_ttl (default 5 s), so a
-	// dead link is detected within degraded_l1_ttl.
 	want := []l2.Config{
 		{Namespace: "users", Channel: "wake:inval:users", BusHealthCheck: 2500 * time.Millisecond},
 		{Namespace: "users", Channel: "custom", BusHealthCheck: 500 * time.Millisecond},
@@ -331,10 +329,6 @@ func TestCache_Metrics_SharedRegistry(t *testing.T) {
 	}
 }
 
-// TestNew_CloseStopsGoroutines checks the lifecycle contract:
-// New starts the bus subscriber and the maintenance goroutine,
-// Close stops both (also covered package-wide by goleak in TestMain).
-//
 //nolint:paralleltest // goleak.VerifyNone must not see other tests' goroutines
 func TestNew_CloseStopsGoroutines(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
@@ -342,15 +336,11 @@ func TestNew_CloseStopsGoroutines(t *testing.T) {
 	n := e.instance()
 	_, err := n.GetOrLoad(t.Context(), "k", func(context.Context) (int, error) { return 1, nil })
 	require.NoError(t, err)
-	n.cli.SetBusDown(true) // maintenance goroutine busy probing
+	n.cli.SetBusDown(true)
 	eventually(t, func() bool { return !n.busUp.Load() })
 	require.NoError(t, n.Close())
 }
 
-// TestWithL2_StartsDegradedWhileRedisIsUnreachable builds a cache on a Redis
-// client whose every dial fails (no network involved): New succeeds, the
-// cache serves from L1 and loads locally, Delete defers, and Close stops
-// the redisl2 bus goroutine with the others (goleak in TestMain).
 func TestWithL2_StartsDegradedWhileRedisIsUnreachable(t *testing.T) {
 	t.Parallel()
 	rdb := redis.NewClient(&redis.Options{

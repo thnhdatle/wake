@@ -11,15 +11,11 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// ReplicationProber runs IDENTIFY_SYSTEM on a replication connection; the
-// replication adapter's connection implements it (pipeline.SlotManager).
 type ReplicationProber interface {
 	IdentifySystem(ctx context.Context) (pipeline.SystemInfo, error)
 }
 
-// RunCheck gathers the facts and evaluates the pre-flight checks of `wake
-// check`. Failures of the checks are findings; the error reports
-// only a failure to gather them over the SQL connection.
+// RunCheck gathers the facts from the server and evaluates them.
 func RunCheck(ctx context.Context, cat *Catalog, prober ReplicationProber, cfg *CheckConfig) (Report, error) {
 	f, err := GatherCheckFacts(ctx, cat, prober, cfg)
 	if err != nil {
@@ -28,9 +24,6 @@ func RunCheck(ctx context.Context, cat *Catalog, prober ReplicationProber, cfg *
 	return Evaluate(f, cfg), nil
 }
 
-// GatherCheckFacts reads the facts the checks evaluate. Usage is read
-// before the replication probe so that the probe's own WAL sender is not
-// counted.
 func GatherCheckFacts(ctx context.Context, cat *Catalog, prober ReplicationProber, cfg *CheckConfig,
 ) (*CheckFacts, error) {
 	if cat == nil || prober == nil || cfg == nil || cfg.Resolver == nil {

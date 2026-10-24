@@ -28,7 +28,6 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - run: scripts/install_ci_tools.sh
       - run: make lint test
-      # - run: make acceptance CI=1
       # - run: make quickstart-test
 
   # release-dry:

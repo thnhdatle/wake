@@ -9,16 +9,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Reasons for skipping an event, the values of the reason label of
-// wake_cdcsource_events_skipped_total.
 const (
-	reasonTombstone     = "tombstone"      // Kafka tombstone (empty value)
-	reasonInvalid       = "invalid"        // not a valid CDC data event
-	reasonUnknownOp     = "unknown_op"     // op outside the CDC event contract
-	reasonTruncate      = "truncate"       // t events are not invalidated (TTL applies)
-	reasonSnapshot      = "snapshot"       // r events without invalidate_on_snapshot
-	reasonUnmappedTable = "unmapped_table" // table without templates
-	reasonNoKeys        = "no_keys"        // no template could be rendered
+	reasonTombstone     = "tombstone"
+	reasonInvalid       = "invalid"
+	reasonUnknownOp     = "unknown_op"
+	reasonTruncate      = "truncate"
+	reasonSnapshot      = "snapshot"
+	reasonUnmappedTable = "unmapped_table"
+	reasonNoKeys        = "no_keys"
 )
 
 var skipReasons = []string{
@@ -26,15 +24,11 @@ var skipReasons = []string{
 	reasonSnapshot, reasonUnmappedTable, reasonNoKeys,
 }
 
-// Kinds of failed Delete calls, the values of the kind label of
-// wake_cdcsource_delete_failures_total.
 const (
-	failureDeferred = "deferred" // cache.ErrDeferred: L2 unreachable
-	failureError    = "error"    // any other error
+	failureDeferred = "deferred"
+	failureError    = "error"
 )
 
-// metrics holds the invalidator's collectors, pre-bound where the label set
-// is fixed.
 type metrics struct {
 	events       prometheus.Counter
 	skipped      map[string]prometheus.Counter
@@ -82,8 +76,6 @@ func newMetrics(reg prometheus.Registerer) (*metrics, error) {
 	return m, nil
 }
 
-// register registers c on reg, reusing an identical collector registered by
-// another invalidator. A nil reg leaves c unregistered (metrics disabled).
 func register[C prometheus.Collector](reg prometheus.Registerer, c C) (C, error) {
 	if reg == nil {
 		return c, nil

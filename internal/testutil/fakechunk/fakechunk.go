@@ -16,13 +16,10 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// ErrBadPosition reports a ChunkRequest.After that is not [id].
 var ErrBadPosition = errors.New("fakechunk: bad position")
 
-// ErrClosed reports a read on a closed session.
 var ErrClosed = errors.New("fakechunk: session closed")
 
-// tables maps "<schema>.<table>" to rows by id; values are JSON.
 type tables map[string]map[int64]string
 
 func (t tables) clone() tables {
@@ -33,9 +30,9 @@ func (t tables) clone() tables {
 	return c
 }
 
-// Reader is the fake. It is safe for concurrent use.
+// Reader is an in-memory chunk reader.
 type Reader struct {
-	mu        sync.Mutex // protects every field below
+	mu        sync.Mutex
 	tables    tables
 	snapshot  pipeline.TxSnapshot
 	committed []uint64
@@ -50,7 +47,6 @@ type Reader struct {
 // New returns a reader without tables.
 func New() *Reader { return &Reader{tables: tables{}} }
 
-// Put sets the row id of a table to the JSON value v.
 func (r *Reader) Put(table string, id int64, v string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -60,14 +56,12 @@ func (r *Reader) Put(table string, id int64, v string) {
 	r.tables[table][id] = v
 }
 
-// Delete removes the row id of a table.
 func (r *Reader) Delete(table string, id int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.tables[table], id)
 }
 
-// SetSnapshot sets the snapshot and committed xids ReadChunk reports.
 func (r *Reader) SetSnapshot(s pipeline.TxSnapshot, committed []uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -75,44 +69,36 @@ func (r *Reader) SetSnapshot(s pipeline.TxSnapshot, committed []uint64) {
 	r.snapshot, r.committed = s, slices.Clone(committed)
 }
 
-// OnRead sets a hook called (without the lock) after the n-th ReadChunk
-// call (1-based) has read its rows and before it returns.
 func (r *Reader) OnRead(fn func(n int)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.onRead = fn
 }
 
-// FailRead makes ReadChunk and session reads return err; nil restores them.
 func (r *Reader) FailRead(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.readErr = err
 }
 
-// FailOpen makes OpenExported return err; nil restores it.
 func (r *Reader) FailOpen(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.openErr = err
 }
 
-// Reads returns the requests of every ReadChunk and session read, in order.
 func (r *Reader) Reads() []pipeline.ChunkRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.reads)
 }
 
-// Sessions returns the snapshot names of the opened sessions and the
-// number of closed ones.
 func (r *Reader) Sessions() (opened []string, closed int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.opened), r.closed
 }
 
-// ReadChunk implements pipeline.ChunkReader over the current rows.
 func (r *Reader) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	if err := ctx.Err(); err != nil {
 		return pipeline.Chunk{}, err
@@ -132,7 +118,6 @@ func (r *Reader) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pipe
 	return c, nil
 }
 
-// readLocked reads a chunk from t and returns the read count.
 func (r *Reader) readLocked(t tables, req pipeline.ChunkRequest) (pipeline.Chunk, int, error) {
 	r.reads = append(r.reads, req)
 	n := len(r.reads)
@@ -168,8 +153,6 @@ func (r *Reader) readLocked(t tables, req pipeline.ChunkRequest) (pipeline.Chunk
 	return c, n, nil
 }
 
-// Row returns the chunk row of id with the JSON value v: key {"id"} and
-// after {"id","v"}.
 func Row(id int64, v string) pipeline.ChunkRow {
 	idJSON := []byte(strconv.FormatInt(id, 10))
 	return pipeline.ChunkRow{
@@ -178,8 +161,6 @@ func Row(id int64, v string) pipeline.ChunkRow {
 	}
 }
 
-// OpenExported implements pipeline.ChunkReader: the session reads the rows
-// as of now.
 func (r *Reader) OpenExported(ctx context.Context, snapshotName string) (pipeline.ChunkSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -193,14 +174,12 @@ func (r *Reader) OpenExported(ctx context.Context, snapshotName string) (pipelin
 	return &Session{r: r, tables: r.tables.clone()}, nil
 }
 
-// Session is a fake session at an imported snapshot.
 type Session struct {
 	r      *Reader
 	tables tables
 	closed bool
 }
 
-// ReadChunk implements pipeline.ChunkSession.
 func (s *Session) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	if err := ctx.Err(); err != nil {
 		return pipeline.Chunk{}, err
@@ -222,7 +201,6 @@ func (s *Session) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pip
 	return c, nil
 }
 
-// Close implements pipeline.ChunkSession.
 func (s *Session) Close(_ context.Context) error {
 	s.r.mu.Lock()
 	defer s.r.mu.Unlock()

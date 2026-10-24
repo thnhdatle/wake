@@ -16,13 +16,10 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
-// jwtHeader is the header of NATS v2 JWTs (ed25519 signatures by nkeys).
 const jwtHeader = `{"typ":"JWT","alg":"ed25519-nkey"}`
 
-// unlimited is -1 in NATS JWT limits.
 const unlimited = -1
 
-// Claim names used more than once.
 const (
 	claimType = "type"
 	claimSub  = "sub"
@@ -30,10 +27,6 @@ const (
 	claimVer  = "version"
 )
 
-// trust is an operator with a system account and one application account,
-// the decentralized-auth setup a credentials file belongs to. The JWTs are
-// built with nkeys only (github.com/nats-io/jwt is not a dependency); their
-// claims follow jwt/v2.
 type trust struct {
 	operatorJWT string
 	sysPub      string
@@ -75,8 +68,6 @@ func accountClaims(jetstream bool) map[string]any {
 	}
 }
 
-// userCreds writes a credentials file for a new user of the application
-// account (signed by signer, normally t.account) and returns its path.
 func (t *trust) userCreds(tb testing.TB, dir, name string, signer nkeys.KeyPair) string {
 	tb.Helper()
 	user := mustKey(tb, nkeys.CreateUser)
@@ -99,7 +90,6 @@ func (t *trust) userCreds(tb testing.TB, dir, name string, signer nkeys.KeyPair)
 	return path
 }
 
-// serverConfig is the operator-mode part of the server configuration.
 func (t *trust) serverConfig() string {
 	return fmt.Sprintf("operator: %q\nsystem_account: %s\nresolver: MEMORY\n"+
 		"resolver_preload: {\n  %s: %q\n  %s: %q\n}\n",

@@ -13,13 +13,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakealert"
 )
 
-// TestRule_Evaluate_NotifiesOncePerStateChange checks the invariant
-// "POST once per state change" for random value sequences and notifier
-// failures: the rule fires iff the value of the last evaluation is above the
-// threshold; the notifier never receives two consecutive notifications with
-// the same state, the first is a firing one, and each matches its value;
-// after a successful delivery the notified state equals the current state,
-// so no state change is lost.
 func TestRule_Evaluate_NotifiesOncePerStateChange(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
@@ -69,7 +62,6 @@ func checkAlerts(t *rapid.T, alerts []pipeline.Alert, threshold float64, changes
 	}
 }
 
-// injectedError is an injected notifier error.
 type injectedError struct{}
 
 func (injectedError) Error() string { return "injected" }

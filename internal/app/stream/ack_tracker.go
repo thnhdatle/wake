@@ -12,19 +12,12 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// DefaultMaxInFlight is the default bound on registered, not yet confirmed
-// transactions.
 const DefaultMaxInFlight = 1 << 16
 
-// TxHandle identifies a transaction registered with AckTracker.Begin. The
-// zero handle is invalid.
 type TxHandle struct{ seq uint64 }
 
-// Group identifies a completion group inside a transaction (one snapshot
-// chunk). The zero group is invalid.
 type Group struct{ tx, id uint64 }
 
-// groupEntry is one open completion group.
 type groupEntry struct {
 	tx      uint64
 	readAt  time.Time
@@ -33,53 +26,28 @@ type groupEntry struct {
 	done    chan struct{}
 }
 
-// AckTrackerOption configures an AckTracker.
 type AckTrackerOption func(*AckTracker)
 
-// WithMaxInFlight bounds the transactions registered and not yet confirmed;
-// Begin blocks while the bound is reached (default DefaultMaxInFlight).
 func WithMaxInFlight(n int) AckTrackerOption {
 	return func(t *AckTracker) { t.maxInFlight = n }
 }
 
-// AckTracker computes the confirmed LSN: the end
-// LSN of the latest transaction T such that T and every transaction
-// registered before it are sealed and have every delivery acknowledged. It
-// never skips a gap.
-//
-// Transactions are registered with Begin in commit (stream) order: the
-// initial-snapshot pseudo-transaction at the consistent point first, then
-// stream transactions and non-transactional forwarded messages (a
-// single-record transaction at the message LSN). Deliveries (record × sink)
-// are added with Add or, for snapshot chunks, AddToGroup; a transaction may
-// receive deliveries after later transactions were registered (the HIGH
-// watermark transaction receives its chunk's `r` events) until it is sealed.
-// A sealed transaction without deliveries is acknowledged at once. Sinks
-// acknowledge through Ack in any order.
-//
-// Memory: one entry per registered, unconfirmed transaction in a ring
-// (O(1) amortized Begin, Add and Ack), bounded by WithMaxInFlight, plus one
-// entry per open group. Begin blocks when the bound is reached; sinks'
-// bounded buffers bound the pending deliveries themselves.
-//
-// AckTracker is safe for concurrent use; Begin is called by one goroutine
-// (the reader), so that registration follows commit order.
+// AckTracker computes the confirmed LSN from the acknowledged transactions.
 type AckTracker struct {
-	mu          sync.Mutex // protects every field below except the immutable channels
+	mu          sync.Mutex
 	ring        txRing
 	groups      map[uint64]*groupEntry
 	nextGroup   uint64
 	confirmed   lsn.LSN
-	lastEnd     lsn.LSN       // end LSN of the last registered transaction, or the start
-	space       chan struct{} // non-nil while Begin waits; closed when a slot frees
+	lastEnd     lsn.LSN
+	space       chan struct{}
 	maxInFlight int
 
-	changed chan struct{} // capacity 1: coalesced signal of confirmed advances
-	closed  chan struct{} // always closed: Done of completed transactions and groups
+	changed chan struct{}
+	closed  chan struct{}
 }
 
-// NewAckTracker returns a tracker whose confirmed LSN starts at start, the
-// slot's confirmed_flush_lsn (or its consistent point when just created).
+// NewAckTracker returns a tracker whose confirmed LSN starts at start.
 func NewAckTracker(start lsn.LSN, opts ...AckTrackerOption) (*AckTracker, error) {
 	t := &AckTracker{
 		ring:        newTxRing(),
@@ -100,12 +68,7 @@ func NewAckTracker(start lsn.LSN, opts ...AckTrackerOption) (*AckTracker, error)
 	return t, nil
 }
 
-// Begin registers the next transaction in commit order. commit and end are
-// its commit LSN and end LSN (both the consistent point for the
-// initial-snapshot pseudo-transaction; the message LSN for a
-// non-transactional message); readAt is when Wake read it. It returns
-// ErrOutOfOrder unless commit ≥ the previous end and end ≥ commit, and
-// blocks while WithMaxInFlight transactions are unconfirmed.
+// Begin registers the next transaction in commit order.
 func (t *AckTracker) Begin(ctx context.Context, commit, end lsn.LSN, readAt time.Time) (TxHandle, error) {
 	for {
 		t.mu.Lock()
@@ -133,8 +96,6 @@ func (t *AckTracker) Begin(ctx context.Context, commit, end lsn.LSN, readAt time
 	}
 }
 
-// Add adds one delivery outside any group to an unsealed transaction and
-// returns its token.
 func (t *AckTracker) Add(tx TxHandle) (pipeline.AckToken, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -147,8 +108,6 @@ func (t *AckTracker) Add(tx TxHandle) (pipeline.AckToken, error) {
 	return pipeline.AckToken{Tx: tx.seq}, nil
 }
 
-// NewGroup opens a completion group in an unsealed transaction, for the `r`
-// events of one snapshot chunk. Its deliveries age from readAt.
 func (t *AckTracker) NewGroup(tx TxHandle, readAt time.Time) (Group, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -162,7 +121,6 @@ func (t *AckTracker) NewGroup(tx TxHandle, readAt time.Time) (Group, error) {
 	return Group{tx: tx.seq, id: t.nextGroup}, nil
 }
 
-// AddToGroup adds one delivery to an unsealed group and returns its token.
 func (t *AckTracker) AddToGroup(g Group) (pipeline.AckToken, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -175,8 +133,6 @@ func (t *AckTracker) AddToGroup(g Group) (pipeline.AckToken, error) {
 	return pipeline.AckToken{Tx: g.tx, Group: g.id}, nil
 }
 
-// SealGroup closes the group to further deliveries; it completes once its
-// deliveries are acknowledged (at once when it has none).
 func (t *AckTracker) SealGroup(g Group) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -192,8 +148,6 @@ func (t *AckTracker) SealGroup(g Group) error {
 	return nil
 }
 
-// Seal closes the transaction to further deliveries; it returns ErrGroupOpen
-// while one of its groups is unsealed.
 func (t *AckTracker) Seal(tx TxHandle) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -211,8 +165,7 @@ func (t *AckTracker) Seal(tx TxHandle) error {
 	return nil
 }
 
-// Ack acknowledges one delivery; it implements pipeline.Acker. It returns
-// ErrUnknownDelivery for a token that is not pending.
+// Ack acknowledges one delivery.
 func (t *AckTracker) Ack(tok pipeline.AckToken) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -230,20 +183,14 @@ func (t *AckTracker) Ack(tok pipeline.AckToken) error {
 	return nil
 }
 
-// Confirmed returns the confirmed LSN.
 func (t *AckTracker) Confirmed() lsn.LSN {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.confirmed
 }
 
-// ConfirmedChanged returns a channel that receives after the confirmed LSN
-// advanced. Signals coalesce (capacity 1, never blocks the tracker), so it
-// serves a single consumer, the standby status updater.
 func (t *AckTracker) ConfirmedChanged() <-chan struct{} { return t.changed }
 
-// Done returns a channel closed once the transaction is sealed and every
-// delivery acknowledged, independent of earlier transactions.
 func (t *AckTracker) Done(tx TxHandle) <-chan struct{} {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -257,8 +204,6 @@ func (t *AckTracker) Done(tx TxHandle) <-chan struct{} {
 	return e.done
 }
 
-// GroupDone returns a channel closed once the group is sealed and every
-// delivery acknowledged: the chunk is complete.
 func (t *AckTracker) GroupDone(g Group) <-chan struct{} {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -272,11 +217,6 @@ func (t *AckTracker) GroupDone(g Group) <-chan struct{} {
 	return ge.done
 }
 
-// OldestUnacked returns the read time of the oldest delivery not yet
-// acknowledged, for wake_oldest_unacked_age_seconds and lag.max_ack_age:
-// the read time of the earliest transaction with pending deliveries outside
-// groups, or of the earliest group with pending deliveries, whichever is
-// older. ok is false when nothing is pending.
 func (t *AckTracker) OldestUnacked() (readAt time.Time, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -294,7 +234,6 @@ func (t *AckTracker) OldestUnacked() (readAt time.Time, ok bool) {
 	return readAt, ok
 }
 
-// InFlight returns the number of registered transactions not yet confirmed.
 func (t *AckTracker) InFlight() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -325,8 +264,6 @@ func (t *AckTracker) openGroup(g Group) (*groupEntry, error) {
 	}
 }
 
-// ackPart acknowledges the delivery in its group, or among e's ungrouped
-// deliveries, after checking that one is pending.
 func (t *AckTracker) ackPart(e *txEntry, tok pipeline.AckToken) error {
 	if tok.Group == 0 {
 		if e.ungrouped == 0 {
@@ -353,8 +290,6 @@ func (t *AckTracker) finishGroup(id uint64, ge *groupEntry) {
 	delete(t.groups, id)
 }
 
-// completeTx marks e complete and advances the confirmed LSN over the
-// complete prefix of the ring.
 func (t *AckTracker) completeTx(e *txEntry) {
 	e.complete = true
 	if e.done != nil {

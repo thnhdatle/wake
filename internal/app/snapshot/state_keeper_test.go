@@ -18,8 +18,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakestate"
 )
 
-// stKeeperState returns a state with one unfinished run (two tables) and a
-// queue of one table.
 func stKeeperState() pipeline.State {
 	st := pipeline.NewState(stSlot, stSystem)
 	st.ConsistentPoint = lsn.LSN(0x100)
@@ -34,7 +32,6 @@ func stKeeperState() pipeline.State {
 	return st
 }
 
-// stNewKeeper returns a keeper over a store holding st.
 func stNewKeeper(t *testing.T, st *pipeline.State) (*StateKeeper, *fakestate.Store) {
 	t.Helper()
 	store := fakestate.NewWith(*st)
@@ -43,7 +40,6 @@ func stNewKeeper(t *testing.T, st *pipeline.State) (*StateKeeper, *fakestate.Sto
 	return k, store
 }
 
-// stSignaled reports, without blocking, whether ch holds a signal.
 func stSignaled(ch <-chan struct{}) bool {
 	select {
 	case <-ch:
@@ -414,7 +410,7 @@ func TestStateKeeper_SetProgress(t *testing.T) {
 	k, store := stNewKeeper(t, &st)
 	pos := json.RawMessage("[42]")
 	require.NoError(t, k.setProgress(t.Context(), 3, "public.y", pos, 40, true))
-	pos[1] = '9' // the keeper must have cloned the position
+	pos[1] = '9'
 
 	got := k.State().Snapshot.Runs[0].Tables
 	assert.Equal(t, pipeline.TableProgress{Table: "public.x"}, got[0], "other tables are untouched")

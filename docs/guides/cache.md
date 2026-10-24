@@ -104,7 +104,7 @@ Runnable examples are in `pkg/cache/example_test.go`.
 
 - After `Delete(key)` returns nil, no instance serves an older value.
 - With the invalidator, changes reach every instance within pipeline latency (p99 18.5 ms in the
-  v0.1.0 [benchmark](../../bench/RESULTS.md)). Until then, readers may see the old value.
+  v0.1.0 benchmark). Until then, readers may see the old value.
 - Otherwise the TTL applies.
 
 Known gaps:

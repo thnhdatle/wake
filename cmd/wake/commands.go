@@ -13,7 +13,6 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/buildinfo"
 )
 
-// exitError carries a specific process exit code.
 type exitError struct {
 	code int
 	err  error

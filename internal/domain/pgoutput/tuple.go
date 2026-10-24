@@ -2,34 +2,22 @@
 
 package pgoutput
 
-// TupleKind is the kind byte of one TupleData column.
 type TupleKind byte
 
-// Tuple column kinds.
 const (
-	// TupleNull is SQL NULL.
-	TupleNull TupleKind = 'n'
-	// TupleUnchanged is an unchanged TOAST value that Postgres did not send.
+	TupleNull      TupleKind = 'n'
 	TupleUnchanged TupleKind = 'u'
-	// TupleText is a value in its type's text output format.
-	TupleText TupleKind = 't'
-	// TupleBinary is a value in binary format (only with the binary option,
-	// which Wake does not request; RowImages rejects it).
-	TupleBinary TupleKind = 'b'
+	TupleText      TupleKind = 't'
+	TupleBinary    TupleKind = 'b'
 )
 
-// TupleColumn is one column of a TupleData. Data is set for TupleText and
-// TupleBinary and aliases the buffer passed to Parse or Decode.
 type TupleColumn struct {
 	Kind TupleKind
 	Data []byte
 }
 
-// Tuple is a TupleData: one entry per relation column, in column order.
 type Tuple []TupleColumn
 
-// parseTuple reads TupleData. The column count is checked against the bytes
-// left (each column takes at least one byte) before allocating.
 func parseTuple(r *reader) Tuple {
 	n := int(r.u16("tuple column count"))
 	if r.err != nil {

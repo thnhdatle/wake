@@ -259,7 +259,6 @@ func TestSink_FailedRecords_ReproducedInOrderBeforeNewer(t *testing.T) {
 		h.send(t, event(change.OpUpdate, k, "5"), k+1)
 	}
 	fc.waitRecords(t, 3)
-	// franz-go fails the whole buffered suffix of the partition.
 	fc.complete(3, kerr.TopicAuthorizationFailed)
 	hl := h.waitHealth(t, pipeline.SinkStateFatal)
 	assert.Equal(t, pipeline.CodeSinkFatal, hl.Code)

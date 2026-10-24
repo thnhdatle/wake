@@ -8,7 +8,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// Fixed transaction metadata of the synthesized scenarios.
 const (
 	synthTsMs = int64(1_792_308_604_187)
 	synthXID  = uint32(900)
@@ -39,8 +38,6 @@ func synRelation(oid uint32, name string, identity schema.ReplicaIdentity, cols 
 	return rel
 }
 
-// synthesizedScenarios returns the synthesized golden inputs by name; with
-// -update they are written to testdata/pgoutput/<name>.bin.
 func synthesizedScenarios() map[string][][]byte {
 	return map[string][][]byte{
 		"types":    typesScenario(),
@@ -52,7 +49,6 @@ func synthesizedScenarios() map[string][][]byte {
 	}
 }
 
-// typeColumns pairs every mapped type with a value exercising it.
 func typeColumns() ([]schema.Column, pgoutput.Tuple) {
 	spec := []struct {
 		name string

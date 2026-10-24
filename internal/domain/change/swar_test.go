@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// checkPlainWord fails t when plainWord disagrees with the byte-by-byte
-// test on w.
 func checkPlainWord(t *testing.T, w [8]byte) {
 	t.Helper()
 	want := true
@@ -20,7 +18,6 @@ func checkPlainWord(t *testing.T, w [8]byte) {
 	}
 }
 
-// fill returns 8 copies of bg.
 func fill(bg byte) [8]byte {
 	var w [8]byte
 	for i := range w {
@@ -29,9 +26,6 @@ func fill(bg byte) [8]byte {
 	return w
 }
 
-// TestPlainWord_AdjacentPairs checks plainWord against the byte-by-byte
-// test for every pair of byte values at every pair of adjacent positions
-// in a plain background: borrows between bytes are where SWAR goes wrong.
 func TestPlainWord_AdjacentPairs(t *testing.T) {
 	t.Parallel()
 	for p := range 7 {
@@ -45,8 +39,6 @@ func TestPlainWord_AdjacentPairs(t *testing.T) {
 	}
 }
 
-// TestPlainWord_SingleBytes checks every single byte at every position in
-// backgrounds at the edges of the plain range.
 func TestPlainWord_SingleBytes(t *testing.T) {
 	t.Parallel()
 	for _, bg := range []byte{' ', '!', '#', '[', ']', '~', 0x7f} {

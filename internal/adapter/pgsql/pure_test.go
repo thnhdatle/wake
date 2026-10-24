@@ -283,7 +283,6 @@ func TestPublicationNames_FollowSourceName(t *testing.T) {
 	require.ErrorIs(t, validateSource("a-b", false), ErrInvalidArgument)
 }
 
-// fixedResolver resolves by qualified name.
 type fixedResolver map[string]pipeline.TableDecision
 
 func (r fixedResolver) Resolve(t pipeline.TableInfo) pipeline.TableDecision {

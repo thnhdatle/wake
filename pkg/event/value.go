@@ -10,8 +10,7 @@ import (
 	"strconv"
 )
 
-// Value is the raw JSON of one column value. None of its accessors converts
-// through float64, so integers of any size are read exactly.
+// Value is the raw JSON of one column value.
 type Value json.RawMessage
 
 // Raw returns the value as raw JSON.
@@ -19,14 +18,13 @@ func (v Value) Raw() json.RawMessage {
 	return json.RawMessage(bytes.TrimSpace(v))
 }
 
-// IsNull reports whether the value is JSON null (or empty).
+// IsNull reports whether the value is JSON null or empty.
 func (v Value) IsNull() bool {
 	t := bytes.TrimSpace(v)
 	return len(t) == 0 || string(t) == nullLiteral
 }
 
-// Int64 returns the value as an int64. It fails for anything but a JSON
-// integer literal that fits in 64 bits.
+// Int64 returns the value as an int64.
 func (v Value) Int64() (int64, error) {
 	lit, err := v.integer()
 	if err != nil {
@@ -39,8 +37,7 @@ func (v Value) Int64() (int64, error) {
 	return n, nil
 }
 
-// Uint64 returns the value as a uint64. It fails for anything but a
-// non-negative JSON integer literal that fits in 64 bits.
+// Uint64 returns the value as a uint64.
 func (v Value) Uint64() (uint64, error) {
 	lit, err := v.integer()
 	if err != nil {
@@ -53,8 +50,7 @@ func (v Value) Uint64() (uint64, error) {
 	return n, nil
 }
 
-// BigInt returns the value as an arbitrary-precision integer. It fails for
-// anything but a JSON integer literal.
+// BigInt returns the value as an arbitrary-precision integer.
 func (v Value) BigInt() (*big.Int, error) {
 	lit, err := v.integer()
 	if err != nil {
@@ -67,8 +63,7 @@ func (v Value) BigInt() (*big.Int, error) {
 	return n, nil
 }
 
-// Number returns the value as a json.Number holding the literal exactly as it
-// appears. It fails for anything but a JSON number.
+// Number returns the value as a json.Number holding the exact literal.
 func (v Value) Number() (json.Number, error) {
 	t := bytes.TrimSpace(v)
 	if !isNumber(t) {
@@ -77,8 +72,7 @@ func (v Value) Number() (json.Number, error) {
 	return json.Number(t), nil
 }
 
-// String returns the unescaped content of a JSON string. It fails for any other
-// JSON type, including null.
+// String returns the unescaped content of a JSON string.
 func (v Value) String() (string, error) {
 	t := bytes.TrimSpace(v)
 	if len(t) == 0 || t[0] != '"' {
@@ -91,7 +85,7 @@ func (v Value) String() (string, error) {
 	return s, nil
 }
 
-// Bool returns the value as a bool. It fails for any other JSON type.
+// Bool returns the value as a bool.
 func (v Value) Bool() (bool, error) {
 	switch string(bytes.TrimSpace(v)) {
 	case "true":
@@ -102,9 +96,7 @@ func (v Value) Bool() (bool, error) {
 	return false, fmt.Errorf("%w: not a JSON boolean", ErrValueType)
 }
 
-// Text renders a scalar for use in a template or a key: numbers as the exact
-// literal they have in the JSON, strings verbatim (unescaped) and booleans as
-// true or false. It fails for null, objects and arrays.
+// Text renders a scalar for use in a template or a key.
 func (v Value) Text() (string, error) {
 	t := bytes.TrimSpace(v)
 	switch {
@@ -120,7 +112,6 @@ func (v Value) Text() (string, error) {
 	return "", fmt.Errorf("%w: object or array has no text form", ErrValueType)
 }
 
-// integer returns the literal when the value is a JSON integer.
 func (v Value) integer() (string, error) {
 	t := bytes.TrimSpace(v)
 	if !isNumber(t) {
@@ -134,7 +125,6 @@ func (v Value) integer() (string, error) {
 	return string(t), nil
 }
 
-// isNumber reports whether b is exactly one JSON number literal.
 func isNumber(b []byte) bool {
 	if len(b) == 0 || (b[0] != '-' && (b[0] < '0' || b[0] > '9')) {
 		return false

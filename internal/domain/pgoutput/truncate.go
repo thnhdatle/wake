@@ -2,25 +2,20 @@
 
 package pgoutput
 
-// Truncate option bits.
 const (
 	TruncateCascade         uint8 = 1
 	TruncateRestartIdentity uint8 = 2
 )
 
-// Truncate empties one or more relations in one statement.
 type Truncate struct {
 	Options      uint8
 	RelationOIDs []uint32
 }
 
-// MessageType implements Message.
 func (*Truncate) MessageType() MessageType { return MessageTruncate }
 
-// Cascade reports TRUNCATE ... CASCADE.
 func (m *Truncate) Cascade() bool { return m.Options&TruncateCascade != 0 }
 
-// RestartIdentity reports TRUNCATE ... RESTART IDENTITY.
 func (m *Truncate) RestartIdentity() bool { return m.Options&TruncateRestartIdentity != 0 }
 
 func parseTruncate(r *reader) *Truncate {

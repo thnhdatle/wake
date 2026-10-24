@@ -15,10 +15,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/event"
 )
 
-// testKeylessExisting checks keyless tables in existing mode through `wake run`
-// startup: a keyless table in the publication fails startup with
-// table_keyless unless tables.skip_unkeyed (skipped) or tables.emit_unkeyed
-// (inserts emitted with key null) is set.
 func testKeylessExisting(e *env) {
 	t := e.t
 	e.exec("CREATE TABLE k (a int, b text)")
@@ -52,11 +48,6 @@ func testKeylessExisting(e *env) {
 	p.stop()
 }
 
-// testKeylessManaged checks keyless tables in managed mode: a keyless table
-// matching the globs is never added to wake_<name>; startup fails with
-// table_keyless; with tables.emit_unkeyed it is in wake_<name>_insert, the
-// application's UPDATE and DELETE keep working and its inserts are emitted
-// with key null.
 func testKeylessManaged(e *env) {
 	t := e.t
 	e.exec("CREATE TABLE k (a int, b text)")
@@ -86,7 +77,6 @@ func testKeylessManaged(e *env) {
 	p.stop()
 }
 
-// published counts table in publication.
 func (e *env) published(publication, table string) int {
 	e.t.Helper()
 	var n int
@@ -95,8 +85,6 @@ func (e *env) published(publication, table string) int {
 	return n
 }
 
-// assertKeylessInsert checks that the topic holds exactly one create event
-// with key null.
 func assertKeylessInsert(t *testing.T, k *kafkatest.Kafka, topic string) {
 	t.Helper()
 	recs := consumeAll(t, k, topic)

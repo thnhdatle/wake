@@ -22,11 +22,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/event"
 )
 
-// testSchemaChanges checks ADD COLUMN, DROP COLUMN, ALTER TYPE and
-// RENAME COLUMN, each followed by a write while another writer keeps
-// writing. Each produces a schema-change event in <prefix>._schema with a
-// higher version, and every data event carries the version of the latest
-// schema change before it in seq order.
 func testSchemaChanges(e *env) {
 	t := e.t
 	e.exec("CREATE TABLE s (id bigint PRIMARY KEY, a text DEFAULT 'x')")
@@ -64,14 +59,10 @@ func testSchemaChanges(e *env) {
 		}
 	}
 	e.assertVersionsFollowChanges("s", changes)
-	// Rows not written since a DDL keep their old image at the sink (an
-	// added column's default produces no WAL row change), so compare keys.
 	e.assertSinkKeysEqualSource("s")
 	p.stop()
 }
 
-// startIDWriter inserts and deletes rows naming only the id column, so it
-// keeps working across the DDL of the schema test.
 func (e *env) startIDWriter(table string, base int64) (stop func()) {
 	e.t.Helper()
 	conn := e.db.Conn(e.t)
@@ -86,8 +77,6 @@ func (e *env) startIDWriter(table string, base int64) (stop func()) {
 	})
 }
 
-// schemaChanges returns the schema-change events of table from
-// <prefix>._schema in topic order.
 func (e *env) schemaChanges(table string) []*event.SchemaChange {
 	e.t.Helper()
 	var out []*event.SchemaChange
@@ -106,8 +95,6 @@ func (e *env) schemaChanges(table string) []*event.SchemaChange {
 	return out
 }
 
-// assertVersionsFollowChanges checks that every data event of table carries
-// the version of the latest schema change preceding it in seq order.
 func (e *env) assertVersionsFollowChanges(table string, changes []*event.SchemaChange) {
 	e.t.Helper()
 	type item struct {
@@ -140,7 +127,7 @@ func (e *env) assertVersionsFollowChanges(table string, changes []*event.SchemaC
 			continue
 		}
 		if current < 0 {
-			current = it.version // the first version, before any change
+			current = it.version
 		}
 		require.Equal(e.t, current, it.version, "event %s", it.id)
 	}
@@ -154,10 +141,6 @@ func columns(cs []event.Column) string {
 	return strings.Join(parts, ",") + ","
 }
 
-// testHeartbeat checks that on an idle source the heartbeat advances the
-// slot's confirmed_flush_lsn past WAL written for uncaptured tables. It
-// then checks `wake status` against the running instance and, after the
-// stop, its fallback, and the destructive commands.
 func testHeartbeat(e *env) {
 	t := e.t
 	e.createItems("h", 10)
@@ -209,11 +192,6 @@ func testHeartbeat(e *env) {
 	assert.Zero(t, pubs, "publications dropped")
 }
 
-// testOversizedEventBlocksSink checks sink blocking and readiness through
-// `wake run`: an event above the Kafka sink's max_event_bytes blocks the sink with
-// event_too_large, /readyz answers 503 naming it, the sink_fatal alert is
-// POSTed to lag.alert_webhook, and the confirmed LSN never passes the
-// transaction.
 func testOversizedEventBlocksSink(e *env) {
 	t := e.t
 	alerts := &syncList[map[string]any]{}
@@ -274,7 +252,6 @@ func testOversizedEventBlocksSink(e *env) {
 	p.stop()
 }
 
-// sinkCheck returns the sink check of /readyz.
 func sinkCheck(t *testing.T, checks []httpadmin.Check) httpadmin.Check {
 	t.Helper()
 	for _, c := range checks {

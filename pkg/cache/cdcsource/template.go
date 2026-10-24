@@ -9,32 +9,18 @@ import (
 	"unicode/utf8"
 )
 
-// Template is a parsed cache-key template such as "user:{id}" or
-// "user:email:{email}".
-//
-// Syntax: literal text with placeholders. A placeholder is a column name in
-// braces, "{column}"; the name is everything up to the next "}", must not be
-// empty, must not contain "{" and must not start or end with white space.
-// "{{" and "}}" outside a placeholder stand for a literal "{" and "}".
-// Any other "{" or "}" is an error, so a template either parses unambiguously
-// or is rejected with a *TemplateError. Column names are matched exactly
-// (case-sensitive), as Postgres sends them.
-//
-// A template without placeholders is valid: it renders to the same key for
-// every event of its table (a list or count key, for example).
+// Template is a parsed cache-key template such as "user:{id}".
 type Template struct {
 	raw   string
 	parts []part
 }
 
-// part is either a literal or a column reference.
 type part struct {
-	text   string // literal text, or the column name when column is true
+	text   string
 	column bool
 }
 
-// ParseTemplate parses a key template. Errors are *TemplateError values
-// matching ErrTemplate.
+// ParseTemplate parses a key template.
 func ParseTemplate(s string) (Template, error) {
 	if s == "" {
 		return Template{}, &TemplateError{Template: s, Reason: "empty template"}
@@ -76,8 +62,6 @@ func ParseTemplate(s string) (Template, error) {
 	return Template{raw: s, parts: parts}, nil
 }
 
-// placeholder parses the placeholder opening at s[open] and returns the
-// column name and the offset after the closing brace.
 func placeholder(s string, open int) (name string, next int, err error) {
 	end := strings.IndexAny(s[open+1:], "{}")
 	if end < 0 || s[open+1+end] == '{' {
@@ -97,11 +81,10 @@ func placeholder(s string, open int) (name string, next int, err error) {
 	return name, open + end + 2, nil
 }
 
-// String returns the template as it was parsed.
+// String returns the template as parsed.
 func (t Template) String() string { return t.raw }
 
-// Columns returns the referenced column names in order of first appearance,
-// without duplicates.
+// Columns returns the column names the template references.
 func (t Template) Columns() []string {
 	var cols []string
 	for _, p := range t.parts {
@@ -112,9 +95,6 @@ func (t Template) Columns() []string {
 	return cols
 }
 
-// render builds the key with lookup resolving each column to its text. ok is
-// false when a column cannot be resolved (absent, null or not a scalar) or the
-// key would be empty.
 func (t Template) render(lookup func(col string) (string, bool)) (string, bool) {
 	var b strings.Builder
 	for _, p := range t.parts {

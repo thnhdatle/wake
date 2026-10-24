@@ -12,39 +12,32 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// DefaultCapacity is the default bound on unacknowledged records.
 const DefaultCapacity = 1024
 
-// ErrNoPending reports an acknowledgement request without such a pending
-// record.
 var ErrNoPending = errors.New("fakesink: no such pending record")
 
-// Option configures a Sink.
 type Option func(*Sink)
 
-// WithCapacity bounds the unacknowledged records; Send blocks at the bound.
-// Values below 1 mean 1.
 func WithCapacity(n int) Option {
 	return func(s *Sink) { s.capacity = max(n, 1) }
 }
 
-// WithAutoAck acknowledges every record as soon as Send stores it.
 func WithAutoAck() Option {
 	return func(s *Sink) { s.autoAck = true }
 }
 
-// Sink is the fake. It is safe for concurrent use.
+// Sink is an in-memory sink.
 type Sink struct {
 	name     string
 	capacity int
 	autoAck  bool
 
-	mu       sync.Mutex // protects every field below
+	mu       sync.Mutex
 	received []pipeline.Record
 	pending  []pipeline.Record
 	health   pipeline.SinkHealth
 	sendErr  error
-	changed  chan struct{} // closed and replaced on every receive or ack
+	changed  chan struct{}
 }
 
 // New returns an empty healthy sink.
@@ -56,10 +49,8 @@ func New(name string, opts ...Option) *Sink {
 	return s
 }
 
-// Name implements pipeline.Sink.
 func (s *Sink) Name() string { return s.name }
 
-// Send stores rec, blocking while capacity records are unacknowledged.
 func (s *Sink) Send(ctx context.Context, rec pipeline.Record) error {
 	for {
 		s.mu.Lock()
@@ -90,49 +81,41 @@ func (s *Sink) Send(ctx context.Context, rec pipeline.Record) error {
 	}
 }
 
-// Health implements pipeline.Sink.
 func (s *Sink) Health() pipeline.SinkHealth {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.health
 }
 
-// Run blocks until ctx ends and returns nil.
 func (s *Sink) Run(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
 
-// SetHealth sets what Health reports.
 func (s *Sink) SetHealth(h pipeline.SinkHealth) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.health = h
 }
 
-// FailSends makes Send return err; nil restores normal sends.
 func (s *Sink) FailSends(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sendErr = err
 }
 
-// Received returns every record received, in Send order.
 func (s *Sink) Received() []pipeline.Record {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.received)
 }
 
-// Pending returns the unacknowledged records, oldest first.
 func (s *Sink) Pending() []pipeline.Record {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.pending)
 }
 
-// AckNext acknowledges up to n of the oldest pending records and returns how
-// many it acknowledged.
 func (s *Sink) AckNext(n int) (int, error) {
 	s.mu.Lock()
 	n = min(max(n, 0), len(s.pending))
@@ -143,8 +126,6 @@ func (s *Sink) AckNext(n int) (int, error) {
 	return n, ackAll(recs)
 }
 
-// AckAt acknowledges the i-th pending record (0 is the oldest), so tests can
-// acknowledge out of order.
 func (s *Sink) AckAt(i int) error {
 	s.mu.Lock()
 	if i < 0 || i >= len(s.pending) {
@@ -158,7 +139,6 @@ func (s *Sink) AckAt(i int) error {
 	return rec.Ack.Ack()
 }
 
-// AckAll acknowledges every pending record.
 func (s *Sink) AckAll() error {
 	s.mu.Lock()
 	n := len(s.pending)
@@ -167,15 +147,12 @@ func (s *Sink) AckAll() error {
 	return err
 }
 
-// Changed returns a channel closed at the next receive or acknowledgement,
-// so tests can wait without sleeping.
 func (s *Sink) Changed() <-chan struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.changed
 }
 
-// WaitReceived blocks until at least n records were received in total.
 func (s *Sink) WaitReceived(ctx context.Context, n int) error {
 	for {
 		s.mu.Lock()

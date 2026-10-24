@@ -30,10 +30,6 @@ func TestExample_ParsesAndValidates(t *testing.T) {
 	assert.ElementsMatch(t, all, types, "the example must cover every sink type")
 }
 
-// TestExample_EveryFieldIsDocumented prevents drift between the Config struct
-// and deploy/config.example.yaml: every yaml key path of Config
-// must appear in the example, and sinks entries together must cover every
-// sink sub-section key.
 func TestExample_EveryFieldIsDocumented(t *testing.T) {
 	t.Parallel()
 
@@ -47,7 +43,6 @@ func TestExample_EveryFieldIsDocumented(t *testing.T) {
 	assert.Empty(t, missing, "keys of Config absent from deploy/config.example.yaml")
 }
 
-// TestExample_MissingKeyDetection proves the drift check itself can fail.
 func TestExample_MissingKeyDetection(t *testing.T) {
 	t.Parallel()
 
@@ -73,9 +68,6 @@ func TestExample_EnvDocumented(t *testing.T) {
 	assert.Contains(t, string(raw), "Sizes")
 }
 
-// missingKeys returns the yaml key paths of struct type t that none of nodes
-// contains. For lists of structs ("[]" in the path) a key counts as present
-// when at least one element has it.
 func missingKeys(t reflect.Type, nodes []any, path string) []string {
 	var out []string
 	for i := range t.NumField() {
@@ -99,7 +91,6 @@ func missingKeys(t reflect.Type, nodes []any, path string) []string {
 	return out
 }
 
-// childrenAt collects the values under key from every map node.
 func childrenAt(nodes []any, key string) []any {
 	var out []any
 	for _, n := range nodes {
@@ -112,7 +103,6 @@ func childrenAt(nodes []any, key string) []any {
 	return out
 }
 
-// descend recurses into struct, pointer-to-struct and list-of-struct fields.
 func descend(ft reflect.Type, children []any, path string) []string {
 	if ft.Kind() == reflect.Pointer {
 		ft = ft.Elem()

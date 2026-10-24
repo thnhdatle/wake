@@ -7,7 +7,6 @@ import (
 	"fmt"
 )
 
-// Error codes of docs/guides/errors.md produced by this package.
 const (
 	CodeReplicationPrivilege = "replication_privilege"
 	CodeSlotInUse            = "slot_in_use"
@@ -17,58 +16,29 @@ const (
 )
 
 var (
-	// ErrReplicationPrivilege reports a role that may not open a replication
-	// connection (code replication_privilege).
 	ErrReplicationPrivilege = errors.New("pgrepl: replication privilege missing")
-	// ErrSlotInUse reports a slot with another active consumer (code
-	// slot_in_use).
-	ErrSlotInUse = errors.New("pgrepl: replication slot in use")
-	// ErrSlotInvalidated reports a slot whose WAL was removed (wal_status
-	// lost, code slot_invalidated).
-	ErrSlotInvalidated = errors.New("pgrepl: replication slot invalidated")
-	// ErrNoFreeWALSender reports that max_wal_senders connections are in use
-	// (code no_free_wal_sender).
-	ErrNoFreeWALSender = errors.New("pgrepl: no free wal sender")
-	// ErrNoFreeSlot reports that max_replication_slots slots exist (code
-	// no_free_slot).
-	ErrNoFreeSlot = errors.New("pgrepl: no free replication slot")
-	// ErrSlotNotFound reports a slot that does not exist.
-	ErrSlotNotFound = errors.New("pgrepl: replication slot not found")
-	// ErrSlotExists reports CreateSlot for a slot that already exists.
-	ErrSlotExists = errors.New("pgrepl: replication slot already exists")
-	// ErrInvalidArgument reports an invalid constructor argument, option,
-	// slot or publication name.
-	ErrInvalidArgument = errors.New("pgrepl: invalid argument")
-	// ErrNotStreaming reports Receive or SendStandbyStatus before
-	// StartReplication.
-	ErrNotStreaming = errors.New("pgrepl: replication not started")
-	// ErrStreaming reports a command on a connection that is streaming.
-	ErrStreaming = errors.New("pgrepl: connection is streaming")
-	// ErrClosed reports a call after Close or after the connection broke
-	// while streaming.
-	ErrClosed = errors.New("pgrepl: connection closed")
-	// ErrProtocol reports an unexpected replication protocol message.
-	ErrProtocol = errors.New("pgrepl: protocol error")
+	ErrSlotInUse            = errors.New("pgrepl: replication slot in use")
+	ErrSlotInvalidated      = errors.New("pgrepl: replication slot invalidated")
+	ErrNoFreeWALSender      = errors.New("pgrepl: no free wal sender")
+	ErrNoFreeSlot           = errors.New("pgrepl: no free replication slot")
+	ErrSlotNotFound         = errors.New("pgrepl: replication slot not found")
+	ErrSlotExists           = errors.New("pgrepl: replication slot already exists")
+	ErrInvalidArgument      = errors.New("pgrepl: invalid argument")
+	ErrNotStreaming         = errors.New("pgrepl: replication not started")
+	ErrStreaming            = errors.New("pgrepl: connection is streaming")
+	ErrClosed               = errors.New("pgrepl: connection closed")
+	ErrProtocol             = errors.New("pgrepl: protocol error")
 )
 
-// Error is a replication failure with an error code of docs/guides/errors.md.
-// It matches its sentinel (ErrSlotInUse, ...) and the underlying cause with
-// errors.Is and errors.As.
 type Error struct {
-	// Code is the error code, e.g. slot_in_use.
-	Code string
-	// Slot is the slot name, empty when not slot related.
-	Slot string
-	// PID is the active consumer's process id (slot_in_use), zero when
-	// unknown.
-	PID int32
-	// Detail explains the failure and its remediation.
+	Code   string
+	Slot   string
+	PID    int32
 	Detail string
 	kind   error
 	cause  error
 }
 
-// Error implements error.
 func (e *Error) Error() string {
 	msg := fmt.Sprintf("%v (%s): %s", e.kind, e.Code, e.Detail)
 	if e.cause != nil {
@@ -77,10 +47,8 @@ func (e *Error) Error() string {
 	return msg
 }
 
-// ErrorCode returns the error code.
 func (e *Error) ErrorCode() string { return e.Code }
 
-// Unwrap returns the sentinel and the cause.
 func (e *Error) Unwrap() []error {
 	if e.cause == nil {
 		return []error{e.kind}
@@ -88,8 +56,6 @@ func (e *Error) Unwrap() []error {
 	return []error{e.kind, e.cause}
 }
 
-// privilegeError explains how to grant the replication privilege per
-// provider.
 func privilegeError(role string, cause error) *Error {
 	if role == "" {
 		role = "<role>"

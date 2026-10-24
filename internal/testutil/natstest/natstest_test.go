@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-// decode returns a JWT's claims after checking its signature with issuer.
 func decode(t *testing.T, token, issuer string) map[string]any {
 	t.Helper()
 	parts := strings.Split(token, ".")

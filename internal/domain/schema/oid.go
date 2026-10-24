@@ -2,14 +2,8 @@
 
 package schema
 
-// FirstNormalObjectID is the first OID Postgres assigns to user-created
-// objects (FirstNormalObjectId). Types at or above it (enums, domains,
-// composites, extension types such as citext) are not in the mapping table
-// and are emitted as their text representation.
 const FirstNormalObjectID uint32 = 16384
 
-// OIDs of the built-in types in the mapping table: scalars, ranges,
-// multiranges and arrays (pg_type.dat; stable across Postgres versions).
 const (
 	OIDBool           uint32 = 16
 	OIDBytea          uint32 = 17
@@ -87,7 +81,6 @@ const (
 	OIDPgSnapshot     uint32 = 5038
 	OIDXID8           uint32 = 5069
 
-	// Built-in array types (pg_type.typarray of the types above).
 	OIDBoolArray           uint32 = 1000
 	OIDByteaArray          uint32 = 1001
 	OIDCharArray           uint32 = 1002

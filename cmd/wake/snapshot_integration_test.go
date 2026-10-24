@@ -17,10 +17,6 @@ import (
 	"github.com/thnhdatle/wake/internal/config"
 )
 
-// testKillDuringInitialSnapshot checks `kill -9` during the initial
-// snapshot while writers run, restart, final sink state equals Postgres.
-// The restarted process keeps the slot, releases the stream at once and
-// resumes the unfinished table through watermarks under the same run_id.
 func testKillDuringInitialSnapshot(e *env) {
 	t := e.t
 	e.createItems("items", 60_000)
@@ -75,10 +71,6 @@ func mustStore(t *testing.T, path string) *statefile.Store {
 	return s
 }
 
-// testAddTableUnderLoad checks that a table created while the pipeline
-// runs is published by the managed refresh and snapshotted through
-// watermarks while writers keep writing to it and to an existing table.
-// Afterwards `wake snapshot table` re-snapshots an existing table.
 func testAddTableUnderLoad(e *env) {
 	t := e.t
 	e.createItems("a", 500)
@@ -112,9 +104,6 @@ func testAddTableUnderLoad(e *env) {
 	p.stop()
 }
 
-// testSIGHUPReloadsGlobs checks table detection on SIGHUP: the
-// reloaded tables.include adds a table to the managed publication and it is
-// snapshotted without waiting for tables.refresh_interval.
 func testSIGHUPReloadsGlobs(e *env) {
 	t := e.t
 	e.createItems("a", 100)

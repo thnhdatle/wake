@@ -11,13 +11,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// This file models Wake: the stream reader (WAL in order, stream events to
-// the sink, every transaction fed to the Merger), the snapshotter (LOW,
-// chunk read, pg_xact_status, HIGH, then r events or a retry) and a sink
-// that applies events in emission order and checks that no event id repeats,
-// no r event is staler than a stream event of its key and no r event
-// resurrects a deleted key.
-
 type sinkRow struct {
 	present bool
 	version uint64
@@ -25,7 +18,7 @@ type sinkRow struct {
 
 type modelSink struct {
 	rows       [modelKeys]sinkRow
-	lastStream [modelKeys]uint64 // version of the last stream event for the key
+	lastStream [modelKeys]uint64
 	ids        map[change.ID]bool
 }
 
@@ -44,8 +37,6 @@ func (s *modelSink) stream(t *rapid.T, id change.ID, c modelChange) {
 	s.lastStream[c.key] = c.version
 }
 
-// read applies an r event and checks that it carries no stale value after a
-// newer stream event and resurrects no key.
 func (s *modelSink) read(t *rapid.T, id change.ID, k int, version uint64) {
 	s.id(t, id)
 	last := s.lastStream[k]
@@ -73,12 +64,10 @@ type modelStats struct {
 }
 
 type modelWake struct {
-	db     *modelDB
-	sink   modelSink
-	pos    int
-	merger *watermark.Merger
-	// skipEmpty models pgoutput on Postgres 15+, which sends no Begin or
-	// Commit for transactions without published changes or messages.
+	db        *modelDB
+	sink      modelSink
+	pos       int
+	merger    *watermark.Merger
 	skipEmpty bool
 	progress  watermark.Progress[int]
 	acks      []uint64
@@ -101,8 +90,6 @@ func newModelWake(db *modelDB, stats *modelStats) *modelWake {
 
 func recordLSN(i int) lsn.LSN { return lsn.LSN(0x1000 + i*0x100) }
 
-// readOne reads the next WAL record, as the stream does after transaction
-// assembly.
 func (w *modelWake) readOne(t *rapid.T) {
 	rec := w.db.wal[w.pos]
 	at := recordLSN(w.pos)
@@ -147,7 +134,6 @@ func (w *modelWake) message(t *rapid.T, at lsn.LSN, content []byte) {
 	w.resolve(t, at, out)
 }
 
-// resolve applies a chunk outcome: r events right after HIGH, or a re-run.
 func (w *modelWake) resolve(t *rapid.T, high lsn.LSN, out watermark.Outcome) {
 	require.Equal(t, phaseWait, w.phase)
 	require.Equal(t, w.chunk, out.Chunk)
@@ -178,7 +164,6 @@ func (w *modelWake) resolve(t *rapid.T, high lsn.LSN, out watermark.Outcome) {
 	}
 }
 
-// advance performs the snapshotter's next step, if it is not waiting.
 func (w *modelWake) advance(t *rapid.T) {
 	switch w.phase {
 	case phaseIdle:

@@ -45,7 +45,6 @@ func TestProgress_Complete_Order(t *testing.T) {
 			var p watermark.Progress[string]
 			_, ok := p.Committed()
 			require.False(t, ok)
-			// Chunk counters 1, 3 and 4 were consumed by retries.
 			require.NoError(t, p.Register(0, "a"))
 			require.NoError(t, p.Register(2, "c"))
 			require.NoError(t, p.Register(5, "d"))
@@ -90,9 +89,6 @@ func TestResumeProgress_StartsFromPersisted(t *testing.T) {
 	assert.Equal(t, `[80]`, got)
 }
 
-// TestProgress_Committed_ContiguousPrefix checks against a model: progress
-// is the upper key of the longest prefix of registered chunks whose members
-// are all complete.
 func TestProgress_Committed_ContiguousPrefix(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {

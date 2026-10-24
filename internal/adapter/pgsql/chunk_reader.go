@@ -16,24 +16,17 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// int8OID is the type OID of bigint parameters.
 const int8OID = 20
 
-// snapshotNameRE matches the names pg_export_snapshot and
-// CREATE_REPLICATION_SLOT … EXPORT_SNAPSHOT produce ("%08X-%08X-%d"); it
-// makes the name safe to embed in SET TRANSACTION SNAPSHOT, which takes no
-// parameters.
 var snapshotNameRE = regexp.MustCompile(`^[0-9A-F]{1,16}-[0-9A-F]{1,16}(-[0-9]{1,10})?$`)
 
-// ChunkReader reads table chunks. It implements
-// pipeline.ChunkReader and is safe for concurrent use; each ReadChunk and
-// each session uses its own pooled connection.
+// ChunkReader reads table rows in chunks for snapshots.
 type ChunkReader struct {
 	pool *Pool
 	o    options
 }
 
-// NewChunkReader validates the dependencies.
+// NewChunkReader returns a ChunkReader that uses pool.
 func NewChunkReader(pool *Pool, opts ...Option) (*ChunkReader, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("%w: nil pool", ErrInvalidArgument)
@@ -55,9 +48,7 @@ func validateRequest(req *pipeline.ChunkRequest) error {
 	return nil
 }
 
-// ReadChunk implements pipeline.ChunkReader: in one READ ONLY
-// REPEATABLE READ transaction it reads pg_current_snapshot(), then the
-// chunk, then pg_xact_status of every xid in the snapshot's xip list.
+// ReadChunk reads the next chunk of a table.
 func (r *ChunkReader) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	if err := validateRequest(&req); err != nil {
 		return pipeline.Chunk{}, err
@@ -100,8 +91,6 @@ func (r *ChunkReader) ReadChunk(ctx context.Context, req pipeline.ChunkRequest) 
 const committedXIPSQL = `SELECT x FROM unnest($1::text[]) AS t(x)
 WHERE pg_catalog.pg_xact_status(x::xid8) = 'committed'`
 
-// committedXIP returns the xids of xip that pg_xact_status reports
-// committed, strictly increasing.
 func committedXIP(ctx context.Context, tx pgx.Tx, xip []uint64) ([]uint64, error) {
 	if len(xip) == 0 {
 		return nil, nil
@@ -134,9 +123,6 @@ func committedXIP(ctx context.Context, tx pgx.Tx, xip []uint64) ([]uint64, error
 	return slices.Compact(out), nil
 }
 
-// readChunk reads one chunk in the caller's transaction: by keyset
-// pagination on the primary key (else the replica identity index), or by
-// ctid ranges for tables without one.
 func readChunk(ctx context.Context, tx pgx.Tx, req *pipeline.ChunkRequest) (pipeline.Chunk, error) {
 	meta, err := loadTableMeta(ctx, tx, req.Schema, req.Table)
 	if err != nil {
@@ -148,12 +134,6 @@ func readChunk(ctx context.Context, tx pgx.Tx, req *pipeline.ChunkRequest) (pipe
 	return readCTID(ctx, tx, meta, req)
 }
 
-// keysetSQL builds
-//
-//	SELECT <cols> FROM [ONLY] <table> [WHERE (<key>) > ($1, …)] ORDER BY <key> LIMIT $n
-//
-// ONLY excludes inheritance children of plain tables; a partitioned table is
-// read through its root.
 func keysetSQL(m *tableMeta, key []string, after bool) string {
 	var b strings.Builder
 	b.WriteString("SELECT ")
@@ -197,8 +177,6 @@ func quoteNames(names []string) string {
 	return strings.Join(q, ", ")
 }
 
-// readKeyset reads up to req.Limit rows after the position by key; it reads
-// one extra row to tell whether the table has more.
 func readKeyset(ctx context.Context, tx pgx.Tx, m *tableMeta, key []string, req *pipeline.ChunkRequest,
 ) (pipeline.Chunk, error) {
 	keyPos := make([]int, len(key))
@@ -232,7 +210,7 @@ func readKeyset(ctx context.Context, tx pgx.Tx, m *tableMeta, key []string, req 
 	rr := tx.Conn().PgConn().ExecParams(ctx, keysetSQL(m, key, req.After != nil), params, oids, nil, nil)
 	for rr.NextRow() {
 		if read++; read > req.Limit {
-			continue // the extra row: more rows follow
+			continue
 		}
 		values := rr.Values()
 		row, rerr := rend.row(values)
@@ -258,10 +236,6 @@ func readKeyset(ctx context.Context, tx pgx.Tx, m *tableMeta, key []string, req 
 	return chunk, nil
 }
 
-// OpenExported implements pipeline.ChunkReader: it opens a READ ONLY
-// REPEATABLE READ transaction on its own connection and imports the
-// exported snapshot with SET TRANSACTION SNAPSHOT. The session holds the
-// connection until Close.
 func (r *ChunkReader) OpenExported(ctx context.Context, snapshotName string) (pipeline.ChunkSession, error) {
 	if !snapshotNameRE.MatchString(snapshotName) {
 		return nil, fmt.Errorf("%w: snapshot name %q", ErrInvalidArgument, snapshotName)
@@ -285,5 +259,4 @@ func (r *ChunkReader) OpenExported(ctx context.Context, snapshotName string) (pi
 	return &Session{r: r, conn: conn, tx: tx}, nil
 }
 
-// Compile-time check of the port ChunkReader implements.
 var _ pipeline.ChunkReader = (*ChunkReader)(nil)

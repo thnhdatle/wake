@@ -10,23 +10,16 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/lsn"
 )
 
-// IDKind tells which CDC event id form an ID uses.
 type IDKind uint8
 
 const (
-	// IDKindStream is a stream event id: <commit_lsn>-<index_in_tx>.
 	IDKindStream IDKind = iota
-	// IDKindSnapshot is a snapshot read id: <lsn>-r<run_id>-<n>.
 	IDKindSnapshot
-	// IDKindSchema is a schema-change id: <commit_lsn>-s<index_in_tx>.
 	IDKindSchema
-	// IDKindMessage is a forwarded logical message id: <lsn>-m<n> (outside the CDC event contract).
 	IDKindMessage
 )
 
-// ID identifies one emitted record. N is index_in_tx for stream and schema
-// ids, the snapshot counter n for snapshot ids and the message counter for
-// message ids. Run is the snapshot run id and is zero otherwise.
+// ID identifies a change event.
 type ID struct {
 	LSN  lsn.LSN
 	Kind IDKind
@@ -34,39 +27,31 @@ type ID struct {
 	N    uint64
 }
 
-// StreamID returns the id of the k-th captured event of a transaction.
 func StreamID(commit lsn.LSN, k uint64) ID {
 	return ID{LSN: commit, Kind: IDKindStream, N: k}
 }
 
-// SnapshotID returns the id of the n-th row of snapshot run run.
 func SnapshotID(at lsn.LSN, run, n uint64) ID {
 	return ID{LSN: at, Kind: IDKindSnapshot, Run: run, N: n}
 }
 
-// SchemaID returns the id of the schema-change event emitted before the k-th
-// captured event of a transaction.
 func SchemaID(commit lsn.LSN, k uint64) ID {
 	return ID{LSN: commit, Kind: IDKindSchema, N: k}
 }
 
-// MessageID returns the id of the n-th forwarded logical message.
 func MessageID(at lsn.LSN, n uint64) ID {
 	return ID{LSN: at, Kind: IDKindMessage, N: n}
 }
 
-// Seq returns the record's position in the CDC event total order.
 func (id ID) Seq() Seq {
 	return Seq{LSN: id.LSN, K: id.N, Schema: id.Kind == IDKindSchema}
 }
 
-// String formats the id per its grammar.
 func (id ID) String() string {
 	var buf [64]byte
 	return string(id.AppendText(buf[:0]))
 }
 
-// AppendText appends the textual id to dst.
 func (id ID) AppendText(dst []byte) []byte {
 	dst = id.LSN.AppendText(dst)
 	dst = append(dst, '-')
@@ -84,7 +69,7 @@ func (id ID) AppendText(dst []byte) []byte {
 	return strconv.AppendUint(dst, id.N, 10)
 }
 
-// ParseID parses any of the four id forms.
+// ParseID parses the text form of an ID.
 func ParseID(s string) (ID, error) {
 	at, rest, ok := strings.Cut(s, "-")
 	if !ok || rest == "" {

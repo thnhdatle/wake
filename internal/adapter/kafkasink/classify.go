@@ -17,21 +17,16 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// verdict is the classification of a delivery error. Every
-// error is retried; a fatal one also makes Health report SinkStateFatal with
-// code until the cause is fixed.
 type verdict struct {
 	fatal  bool
-	code   string // pipeline.CodeEventTooLarge or pipeline.CodeSinkFatal when fatal
-	reason string // RetryReason* label
+	code   string
+	reason string
 }
 
 func fatalVerdict(reason string) verdict {
 	return verdict{fatal: true, code: pipeline.CodeSinkFatal, reason: reason}
 }
 
-// authErrors are the Kafka error codes of authentication and authorization
-// failures.
 var authErrors = []*kerr.Error{
 	kerr.SaslAuthenticationFailed,
 	kerr.IllegalSaslState,
@@ -42,8 +37,6 @@ var authErrors = []*kerr.Error{
 	kerr.DelegationTokenAuthorizationFailed,
 }
 
-// classify sorts err into retriable and non-retriable. An unknown topic
-// is non-retriable only while kafka.auto_create_topics is off.
 func classify(err error, autoCreate bool) verdict {
 	switch {
 	case errors.Is(err, ErrEventTooLarge):
@@ -75,9 +68,6 @@ func classify(err error, autoCreate bool) verdict {
 	return verdict{reason: RetryReasonOther}
 }
 
-// isAuthError reports SASL, ACL and certificate failures. A broker that
-// closes the connection right after the first request (kgo.ErrFirstReadEOF)
-// almost always means a TLS or SASL mismatch.
 func isAuthError(err error) bool {
 	for _, ae := range authErrors {
 		if errors.Is(err, ae) {
@@ -98,7 +88,6 @@ func isAuthError(err error) bool {
 		errors.As(err, &firstRead)
 }
 
-// isNetworkError reports transport failures and timeouts.
 func isNetworkError(err error) bool {
 	var ne net.Error
 	return errors.As(err, &ne) ||

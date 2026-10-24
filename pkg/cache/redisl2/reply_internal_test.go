@@ -130,7 +130,6 @@ func TestUnavailable_WrapsCauseAndKind(t *testing.T) {
 func TestInvalidatePrefix_MatchesWireFormat(t *testing.T) {
 	t.Parallel()
 	ev := l2.Event{Kind: l2.EventInvalidate, Epoch: 1760000000000000, Gen: 1760000000000123, Key: "a|b"}
-	// The script appends "<gen>|<key>" to the prefix.
 	got := invalidatePrefix(ev.Epoch) + "1760000000000123" + "|" + ev.Key
 	assert.Equal(t, l2.EncodeMessage(ev), got)
 }

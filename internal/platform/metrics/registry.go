@@ -11,8 +11,7 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/buildinfo"
 )
 
-// NewRegistry returns a registry with the Go runtime and process collectors
-// and wake_build_info{version,commit,go_version} 1.
+// NewRegistry returns a registry with the Go runtime, process and build info collectors.
 func NewRegistry(info buildinfo.Info) (*prometheus.Registry, error) {
 	reg := prometheus.NewRegistry()
 	build := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -36,7 +35,6 @@ func NewRegistry(info buildinfo.Info) (*prometheus.Registry, error) {
 	return reg, nil
 }
 
-// register registers every collector, failing on the first error.
 func register(reg prometheus.Registerer, cs ...prometheus.Collector) error {
 	if reg == nil {
 		return ErrNilRegisterer
@@ -49,16 +47,12 @@ func register(reg prometheus.Registerer, cs ...prometheus.Collector) error {
 	return nil
 }
 
-// Option configures a metrics type.
 type Option func(*options)
 
 type options struct {
 	tables *Capper
 }
 
-// WithTableCapper makes the type cap its table label with c, so that several
-// types share one set of captured tables. Without it each type has its own
-// Capper with DefaultLabelLimit.
 func WithTableCapper(c *Capper) Option {
 	return func(o *options) { o.tables = c }
 }

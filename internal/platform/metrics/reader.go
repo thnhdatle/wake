@@ -11,9 +11,7 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// Reader exports the stream reader's counters. It satisfies
-// stream.ReaderMetrics. The table and type labels come from user data and
-// are capped (see Capper).
+// Reader exports the stream reader's counters.
 type Reader struct {
 	tables           *Capper
 	types            *Capper
@@ -27,11 +25,7 @@ type Reader struct {
 	unknownMsgLabels *Capper
 }
 
-// NewReader creates the reader collectors and registers them on reg:
-// wake_unknown_types_total{type}, wake_unknown_messages_total{type},
-// wake_truncate_skipped_total{table}, wake_tables_skipped_total{table,reason},
-// wake_spilled_transactions_total, wake_spilled_bytes_total and
-// wake_spilled_transaction_size_bytes.
+// NewReader creates the reader collectors and registers them on reg.
 func NewReader(reg prometheus.Registerer, opts ...Option) (*Reader, error) {
 	o := newOptions(opts)
 	r := &Reader{
@@ -76,27 +70,22 @@ func NewReader(reg prometheus.Registerer, opts ...Option) (*Reader, error) {
 	return r, nil
 }
 
-// UnknownType counts a column type outside the type mapping.
 func (r *Reader) UnknownType(typeName string) {
 	r.unknownTypes.WithLabelValues(r.types.Label(typeName)).Inc()
 }
 
-// UnknownMessage counts a pgoutput message type outside protocol version 1.
 func (r *Reader) UnknownMessage(msgType byte) {
 	r.unknownMessages.WithLabelValues(r.unknownMsgLabels.Label(messageLabel(msgType))).Inc()
 }
 
-// TruncateSkipped counts a TRUNCATE that was not emitted.
 func (r *Reader) TruncateSkipped(table string) {
 	r.truncateSkipped.WithLabelValues(r.tables.Label(table)).Inc()
 }
 
-// TableSkipped counts a published table that is not captured.
 func (r *Reader) TableSkipped(table string, reason pipeline.SkipReason) {
 	r.tablesSkipped.WithLabelValues(r.tables.Label(table), strings.ToValidUTF8(string(reason), "?")).Inc()
 }
 
-// Spilled counts a transaction moved to a spill file and its size.
 func (r *Reader) Spilled(bytes int64) {
 	r.spilledTx.Inc()
 	if bytes > 0 {
@@ -105,8 +94,6 @@ func (r *Reader) Spilled(bytes int64) {
 	}
 }
 
-// messageLabel renders a pgoutput message type byte: the letter when it is
-// printable ASCII, else its hex value.
 func messageLabel(b byte) string {
 	if b > ' ' && b < 0x7f {
 		return string(rune(b))

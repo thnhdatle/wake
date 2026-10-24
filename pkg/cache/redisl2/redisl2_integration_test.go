@@ -45,8 +45,6 @@ func expectKind(t *testing.T, b l2.Backend, want l2.EventKind) {
 	require.Equal(t, want, next(t, b).Kind)
 }
 
-// exerciseAll runs every operation once and checks the results that do not
-// depend on timing.
 func exerciseAll(t *testing.T, b *redisl2.Backend, key string) {
 	t.Helper()
 	ctx := t.Context()
@@ -93,9 +91,6 @@ func flushScripts(t *testing.T, rdb redis.UniversalClient) {
 	}))
 }
 
-// TestBackend_ScriptCacheFlushed checks the EVALSHA → EVAL fallback,
-// including the pipelined Set and Invalidate, on a single node and on a
-// Cluster (where each shard has its own script cache).
 func TestBackend_ScriptCacheFlushed(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -119,10 +114,6 @@ func TestBackend_ScriptCacheFlushed(t *testing.T) {
 	}
 }
 
-// TestBus_DeadLinkAndRestart freezes the server (a silent link: the health
-// check must report it within two intervals, long before the freeze ends),
-// then stops it (commands fail with ErrUnavailable) and starts it again
-// (data reloaded, script cache empty, subscription re-established).
 func TestBus_DeadLinkAndRestart(t *testing.T) {
 	t.Parallel()
 	srv := redistest.StartSingle(t)
@@ -157,9 +148,6 @@ func TestBus_DeadLinkAndRestart(t *testing.T) {
 	assert.Equal(t, l2.Event{Kind: l2.EventInvalidate, Epoch: 1, Gen: inv.Gen, Key: "k"}, next(t, b))
 }
 
-// TestCluster_KeysSpreadOverEveryShard writes keys through the backend and
-// checks that every master holds some, so the scripts really run on all
-// shards and each touches a single slot.
 func TestCluster_KeysSpreadOverEveryShard(t *testing.T) {
 	t.Parallel()
 	c := redistest.StartCluster(t)
@@ -189,16 +177,11 @@ func TestCluster_KeysSpreadOverEveryShard(t *testing.T) {
 	assert.Equal(t, int32(3), shards.Load())
 	assert.Zero(t, empty.Load(), "every shard holds keys")
 
-	// Documented limitation: the empty key's names carry the empty hash tag
-	// "{}", which Cluster ignores, so its script spans slots and fails.
 	_, err := b.Read(ctx, l2.ReadRequest{Epoch: 1, Key: "", GenTTL: time.Hour})
 	require.ErrorIs(t, err, redisl2.ErrUnavailable)
 	assert.ErrorContains(t, err, "CROSSSLOT")
 }
 
-// TestBackend_CloseLeavesNoGoroutines is not parallel: goleak compares
-// against the goroutines present before the backend was created.
-//
 //nolint:paralleltest // goroutine snapshot must not see other tests' goroutines
 func TestBackend_CloseLeavesNoGoroutines(t *testing.T) {
 	srv := redistest.StartSingle(t)

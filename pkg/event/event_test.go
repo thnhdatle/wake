@@ -72,7 +72,6 @@ func TestDecode_Fixtures_AllContractFixtures(t *testing.T) {
 	}
 }
 
-// checkTombstoneFixture checks the Kafka record wrapper fixture.
 func checkTombstoneFixture(t *testing.T, data []byte) {
 	t.Helper()
 	var wrapper struct {
@@ -180,7 +179,6 @@ func TestDecode_UnknownOp_NotAnError(t *testing.T) {
 	assert.False(t, e.Op.Known())
 }
 
-// validEvent builds an event JSON with the given op, before and after.
 func validEvent(op, before, after string) string {
 	return `{"id":"0/A-1","source":{"db":"d","schema":"s","table":"t"},"op":"` + op +
 		`","ts_ms":1,"lsn":"0/A","key":{"id":1},"before":` + before + `,"after":` + after +
@@ -419,7 +417,6 @@ func TestMergeUnchanged_Fixture_ToastUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "big text", body)
 
-	// The merged image does not alias prev.
 	prev["body"][1] = 'X'
 	body, err = mustValue(t, e.After, "body").String()
 	require.NoError(t, err)

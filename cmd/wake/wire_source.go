@@ -18,19 +18,11 @@ import (
 )
 
 const (
-	// appName is the application_name of Wake's connections.
-	appName = "wake"
-	// extraConns are the pool connections beyond snapshot.parallel_tables:
-	// table snapshot chunk reads, watermark and heartbeat emission, the lag
-	// monitor and the table refresh, plus one spare (pgsql.WithMaxConns).
-	extraConns = 4
-	// closeTimeout bounds closing the source connections.
+	appName      = "wake"
+	extraConns   = 4
 	closeTimeout = 10 * time.Second
 )
 
-// source holds the connections to the source database: the bounded SQL
-// pool with its catalog and publication management, and the replication
-// connection used from slot creation through START_REPLICATION.
 type source struct {
 	pool    *pgsql.Pool
 	catalog *pgsql.Catalog
@@ -39,7 +31,6 @@ type source struct {
 	log     *slog.Logger
 }
 
-// sourceDSN reads the DSN from the environment variable source.dsn_env.
 func sourceDSN(cfg *config.Config) (string, error) {
 	dsn := os.Getenv(cfg.Source.DSNEnv)
 	if dsn == "" {
@@ -49,8 +40,6 @@ func sourceDSN(cfg *config.Config) (string, error) {
 	return dsn, nil
 }
 
-// openSource builds the source adapters. Nothing connects yet; ctx bounds
-// only the cleanup of a failed construction.
 func openSource(ctx context.Context, cfg *config.Config, dsn string, log *slog.Logger) (*source, error) {
 	configErr := func(err error) error {
 		return &exitError{code: exitConfig, err: withCode(codeConfigInvalid, err)}
@@ -75,9 +64,6 @@ func openSource(ctx context.Context, cfg *config.Config, dsn string, log *slog.L
 	return s, nil
 }
 
-// close ends the replication connection, then the pool, within
-// closeTimeout even when ctx is already canceled. The caller must have
-// stopped every Receive first.
 func (s *source) close(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
 	defer cancel()
@@ -89,9 +75,6 @@ func (s *source) close(ctx context.Context) error {
 	return err
 }
 
-// newResolver builds the table resolver from the configuration: the
-// tables.include/exclude globs, tables.name_map and the keyless rule
-// (pipeline.TablePolicy), plus the Kafka topic length limit.
 func newResolver(cfg *config.Config) (*topicResolver, error) {
 	policy, err := pipeline.NewTablePolicy(pipeline.TablePolicyConfig{
 		DB: cfg.Source.Name, NameMap: cfg.Tables.NameMap, EmitUnkeyed: cfg.Tables.EmitUnkeyed,
@@ -115,23 +98,16 @@ func newResolver(cfg *config.Config) (*topicResolver, error) {
 	return r, nil
 }
 
-// kafkaTopics is one Kafka sink's topic prefix and table globs.
 type kafkaTopics struct {
 	prefix string
 	filter pipeline.TableFilter
 }
 
-// topicResolver is the TablePolicy plus the topic name rule: a table
-// whose topic `<prefix>.<schema>.<table>` would exceed 249 characters on a
-// Kafka sink that receives it is skipped like an unmapped invalid identifier
-// (identifier_invalid), so startup and `wake check` reject it and a table
-// detected at runtime is skipped until mapped.
 type topicResolver struct {
 	policy *pipeline.TablePolicy
 	topics []kafkaTopics
 }
 
-// Resolve implements pipeline.TableResolver.
 func (r *topicResolver) Resolve(t pipeline.TableInfo) pipeline.TableDecision {
 	d := r.policy.Resolve(t)
 	if !d.Capture {
@@ -149,8 +125,6 @@ func (r *topicResolver) Resolve(t pipeline.TableInfo) pipeline.TableDecision {
 	return d
 }
 
-// liveResolver is the resolver every component shares; SIGHUP swaps in the
-// one built from the reloaded tables section.
 type liveResolver struct {
 	cur atomic.Pointer[topicResolver]
 }
@@ -161,14 +135,12 @@ func newLiveResolver(r *topicResolver) *liveResolver {
 	return l
 }
 
-// Resolve implements pipeline.TableResolver.
 func (l *liveResolver) Resolve(t pipeline.TableInfo) pipeline.TableDecision {
 	return l.cur.Load().Resolve(t)
 }
 
 func (l *liveResolver) swap(r *topicResolver) { l.cur.Store(r) }
 
-// checkConfig is the configuration of the pre-flight checks.
 func checkConfig(cfg *config.Config, r pipeline.TableResolver) *pgsql.CheckConfig {
 	return &pgsql.CheckConfig{
 		SlotName:    slotName(cfg),
@@ -181,5 +153,4 @@ func checkConfig(cfg *config.Config, r pipeline.TableResolver) *pgsql.CheckConfi
 	}
 }
 
-// slotName is the replication slot wake_<source.name>.
 func slotName(cfg *config.Config) string { return "wake_" + cfg.Source.Name }

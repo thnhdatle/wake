@@ -11,11 +11,8 @@ import (
 	"time"
 )
 
-// HealthcheckTimeout bounds one readiness probe.
 const HealthcheckTimeout = 3 * time.Second
 
-// ProbeAddr turns a listen address into one that can be dialed locally:
-// an empty or unspecified host becomes 127.0.0.1.
 func ProbeAddr(listen string) string {
 	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
@@ -27,7 +24,7 @@ func ProbeAddr(listen string) string {
 	return net.JoinHostPort(host, port)
 }
 
-// Healthcheck issues GET http://addr/readyz and returns nil on 200.
+// Healthcheck probes the readiness endpoint at addr and returns an error if it fails.
 func Healthcheck(ctx context.Context, addr string) error {
 	ctx, cancel := context.WithTimeout(ctx, HealthcheckTimeout)
 	defer cancel()
@@ -47,11 +44,9 @@ func Healthcheck(ctx context.Context, addr string) error {
 	return nil
 }
 
-// MaxStatusBytes bounds the status document FetchStatus reads.
 const MaxStatusBytes = 8 << 20
 
-// FetchStatus issues GET http://addr/v1/status and returns the JSON body of
-// a 200 answer (`wake status`).
+// FetchStatus returns the status document served at addr.
 func FetchStatus(ctx context.Context, addr string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, HealthcheckTimeout)
 	defer cancel()

@@ -141,7 +141,7 @@ func TestCache_SetIfUnchanged_TokenOfOtherShardRejected(t *testing.T) {
 	for i := range 1000 {
 		k := fmt.Sprintf("k%d", i)
 		if c.Token(k) != c.Token("a") && !c.SetIfUnchanged(tok, k, entry("v", 0, 0)) {
-			return // a token captured for another shard is refused
+			return
 		}
 	}
 	t.Fatal("no key in another shard found")
@@ -170,7 +170,7 @@ func TestCache_Bounds_EvictLRU(t *testing.T) {
 	for _, k := range []string{"a", "b", "c"} {
 		c.Set(k, entry(k, 0, 0))
 	}
-	_, _ = c.Get("a") // a becomes most recently used
+	_, _ = c.Get("a")
 	c.Set("d", entry("d", 0, 0))
 	_, ok := c.Get("b")
 	assert.False(t, ok, "least recently used evicted")
@@ -273,15 +273,14 @@ func TestCache_Concurrent_Race(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	assert.LessOrEqual(t, c.Len(), 64+64) // per-shard rounding
+	assert.LessOrEqual(t, c.Len(), 64+64)
 }
 
-// guardModel is the reference model of TestCache_GuardAndBounds_Property.
 type guardModel struct {
 	c                *l1.Cache[string]
-	model            map[string]string   // last value stored per key (may have been evicted)
-	tokens           map[string]l1.Token // tokens captured per key
-	invalidatedSince map[string]bool     // key invalidated since its token
+	model            map[string]string
+	tokens           map[string]l1.Token
+	invalidatedSince map[string]bool
 }
 
 func (m *guardModel) guardedInsert(rt *rapid.T, k string) {
@@ -325,9 +324,6 @@ func (m *guardModel) check(rt *rapid.T, k string) {
 	}
 }
 
-// The L1 guard and the bounds hold for any sequence of operations: no value
-// written before an invalidation is visible after it unless re-written
-// after it, Get returns the latest stored value, and bounds are respected.
 func TestCache_GuardAndBounds_Property(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(rt *rapid.T) {

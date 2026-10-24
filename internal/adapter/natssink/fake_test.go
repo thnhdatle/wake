@@ -28,8 +28,6 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-// waitTimeout bounds every wait on real time; the tests poll state, they
-// never sleep.
 const waitTimeout = 10 * time.Second
 
 const (
@@ -39,7 +37,6 @@ const (
 
 var errInjected = errors.New("injected")
 
-// published is one publish call.
 type published struct {
 	msg *nats.Msg
 	id  string
@@ -66,9 +63,6 @@ func (f *fakeFuture) resolve(err error) {
 	f.ok <- &jetstream.PubAck{Stream: testStream}
 }
 
-// fakeConn is an in-memory conn. In auto mode every publish succeeds at
-// once (or fails with pubErr); otherwise the test resolves publishes with
-// complete.
 type fakeConn struct {
 	mu        sync.Mutex
 	ep        uint64
@@ -81,7 +75,7 @@ type fakeConn struct {
 	all       []published
 	open      []published
 	auto      bool
-	pubErr    error // returned synchronously by publish
+	pubErr    error
 	closed    bool
 	changed   chan struct{}
 }
@@ -162,7 +156,6 @@ func (f *fakeConn) set(fn func(f *fakeConn)) {
 	fn(f)
 }
 
-// complete resolves the n oldest open publishes with err.
 func (f *fakeConn) complete(n int, err error) {
 	f.mu.Lock()
 	n = min(n, len(f.open))
@@ -229,7 +222,6 @@ func (a *acker) total() int {
 	return n
 }
 
-// recorder is an Observer and AckObserver that counts calls.
 type recorder struct {
 	mu       sync.Mutex
 	sent     int

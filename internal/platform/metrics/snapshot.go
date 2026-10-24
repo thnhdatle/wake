@@ -4,12 +4,9 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// otherTable is the table label the snapshotter passes for uncaptured or
-// unparsable tables (snapshot.OtherTable); it is never capped.
 const otherTable = "_other"
 
-// Snapshot exports the snapshot counters. It satisfies snapshot.Metrics. The
-// table label is capped (see Capper); "_other" passes through.
+// Snapshot exports the snapshot counters.
 type Snapshot struct {
 	tables       *Capper
 	rows         *prometheus.CounterVec
@@ -17,10 +14,7 @@ type Snapshot struct {
 	chunkRetries *prometheus.CounterVec
 }
 
-// NewSnapshot creates the snapshot collectors and registers them on reg:
-// wake_snapshot_rows_total{table}, wake_snapshot_requests_total{table} and
-// wake_snapshot_chunk_retries_total{table}. WithTableCapper shares the
-// capped table set with other types.
+// NewSnapshot creates the snapshot collectors and registers them on reg.
 func NewSnapshot(reg prometheus.Registerer, opts ...Option) (*Snapshot, error) {
 	o := newOptions(opts)
 	s := &Snapshot{
@@ -51,17 +45,14 @@ func (s *Snapshot) label(table string) string {
 	return s.tables.Label(table)
 }
 
-// RowsAcked counts snapshot rows acknowledged by every sink.
 func (s *Snapshot) RowsAcked(table string, n uint64) {
 	s.rows.WithLabelValues(s.label(table)).Add(float64(n))
 }
 
-// Request counts a table snapshot request.
 func (s *Snapshot) Request(table string) {
 	s.requests.WithLabelValues(s.label(table)).Inc()
 }
 
-// ChunkRetry counts a chunk discarded and re-run.
 func (s *Snapshot) ChunkRetry(table string) {
 	s.chunkRetries.WithLabelValues(s.label(table)).Inc()
 }

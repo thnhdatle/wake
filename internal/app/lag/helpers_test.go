@@ -23,10 +23,8 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-// waitTimeout guards waits on goroutines; it never paces a test.
 const waitTimeout = 10 * time.Second
 
-// recObserver records everything the monitor exports.
 type recObserver struct {
 	mu         sync.Mutex
 	lagBytes   []int64
@@ -78,7 +76,6 @@ func (o *recObserver) errors() []error {
 	return append([]error(nil), o.pollErrors...)
 }
 
-// fakeAcks is a settable AckAges.
 type fakeAcks struct {
 	mu     sync.Mutex
 	readAt time.Time
@@ -97,15 +94,12 @@ func (a *fakeAcks) set(readAt time.Time, ok bool) {
 	a.readAt, a.ok = readAt, ok
 }
 
-// attempt is one Notify call seen by chanNotifier.
 type attempt struct {
 	alert pipeline.Alert
 	at    time.Time
 	err   error
 }
 
-// chanNotifier reports every Notify call, at the fake clock's time, on a
-// buffered channel and can inject errors.
 type chanNotifier struct {
 	clk      clock.Clock
 	attempts chan attempt
@@ -142,7 +136,6 @@ func (n *chanNotifier) next(t *testing.T) attempt {
 	}
 }
 
-// syncBuffer is a bytes.Buffer safe for a logger used from two goroutines.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -164,7 +157,6 @@ func jsonLogger(buf *syncBuffer) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-// waitWaiter blocks until clk has a pending timer or ticker.
 func waitWaiter(t *testing.T, clk *clock.Fake) {
 	t.Helper()
 	deadline := time.After(waitTimeout)
@@ -181,7 +173,6 @@ func waitWaiter(t *testing.T, clk *clock.Fake) {
 	}
 }
 
-// runner runs a Run(ctx) error function until stopped.
 type runner struct {
 	cancel context.CancelFunc
 	errc   chan error

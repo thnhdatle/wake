@@ -8,7 +8,7 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-// MsgpackCodec returns a Codec using MessagePack (vmihailenco/msgpack).
+// MsgpackCodec returns a Codec using MessagePack.
 func MsgpackCodec[V any]() Codec[V] { return msgpackCodec[V]{} }
 
 type msgpackCodec[V any] struct{}

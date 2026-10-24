@@ -16,7 +16,6 @@ const (
 	examplePath = "../../deploy/config.example.yaml"
 	composePath = "../../deploy/config.compose.yaml"
 
-	// minimalYAML is the smallest valid configuration.
 	minimalYAML = `
 source: {name: app}
 tables: {include: ["public.*"]}
@@ -25,7 +24,6 @@ sinks:
 `
 )
 
-// Indexes of the sinks in the example file.
 const (
 	sinkKafka = iota
 	sinkNATS
@@ -45,8 +43,6 @@ func mustParse(t *testing.T, yaml string) config.Config {
 	return cfg
 }
 
-// loadExample returns a fresh copy of the example configuration; tests
-// mutate it, so each test needs its own.
 func loadExample(t *testing.T) config.Config {
 	t.Helper()
 	cfg, err := config.LoadWith(config.Options{Path: examplePath})

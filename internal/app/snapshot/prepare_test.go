@@ -38,19 +38,16 @@ const (
 	stSnapName   = "00000003-0000001B-1"
 )
 
-// stSaved is one successful Save and how many slots had been created by then.
 type stSaved struct {
 	state   pipeline.State
 	created int
 }
 
-// stRecStore records every saved state in order; failOn makes the n-th Save
-// (1-based) fail.
 type stRecStore struct {
 	inner *fakestate.Store
 	repl  *fakerepl.Source
 
-	mu     sync.Mutex // protects the fields below
+	mu     sync.Mutex
 	saves  []stSaved
 	calls  int
 	failOn int
@@ -81,7 +78,6 @@ func (s *stRecStore) Saved() []stSaved {
 	return append([]stSaved(nil), s.saves...)
 }
 
-// stTables is a TableSource returning fixed tables.
 type stTables struct {
 	tables []Table
 	err    error
@@ -93,7 +89,6 @@ func (s *stTables) CapturedTables(context.Context) ([]Table, error) {
 	return s.tables, s.err
 }
 
-// stFlakyChunks fails the failAt-th OpenExported call (1-based).
 type stFlakyChunks struct {
 	pipeline.ChunkReader
 	failAt int
@@ -112,7 +107,6 @@ func stTable(name string) Table {
 	return Table{Name: "public." + name, Schema: "public", Table: name}
 }
 
-// stEnv bundles the fakes of a Prepare call.
 type stEnv struct {
 	repl   *fakerepl.Source
 	cat    *fakecatalog.Catalog
@@ -125,8 +119,6 @@ type stEnv struct {
 	logs   *bytes.Buffer
 }
 
-// newStEnv returns an environment without slot and without state file whose
-// slot creation yields stConsistent and stSnapName.
 func newStEnv() *stEnv {
 	e := &stEnv{
 		repl:   fakerepl.New(1),
@@ -145,7 +137,6 @@ func newStEnv() *stEnv {
 	return e
 }
 
-// withState stores st and a slot at stConfirmed (exists) in the environment.
 func (e *stEnv) withState(st *pipeline.State) *stEnv {
 	e.inner = fakestate.NewWith(*st)
 	e.store.inner = e.inner
@@ -168,8 +159,6 @@ func stCfg() PrepareConfig {
 	return PrepareConfig{SlotName: stSlot, Mode: ModeInitial, ChunkRows: 500, ParallelTables: 2}
 }
 
-// stOwnedState returns a state owned by the test slot and system with a
-// consistent point, two schema versions, an unfinished run and a queue.
 func stOwnedState() pipeline.State {
 	st := pipeline.NewState(stSlot, stSystem)
 	st.ConsistentPoint, st.ConsistentPointTsMs = lsn.LSN(0x100), 42
@@ -483,7 +472,7 @@ func TestPrepare_ReinitLogsDiscardedProgress(t *testing.T) {
 func TestPrepare_ReinitSlotMissingCreatesSlot(t *testing.T) {
 	t.Parallel()
 	st := stOwnedState()
-	e := newStEnv().withState(&st) // the slot is absent
+	e := newStEnv().withState(&st)
 	cfg := stCfg()
 	cfg.Reinit = true
 	plan, err := Prepare(t.Context(), e.deps(), cfg)
@@ -617,7 +606,7 @@ func TestPrepare_Errors(t *testing.T) {
 		name      string
 		setup     func(e *stEnv)
 		wantSaves int
-		wantSlots int // created slots
+		wantSlots int
 	}{
 		{
 			name:  "slot lookup fails",
@@ -640,9 +629,8 @@ func TestPrepare_Errors(t *testing.T) {
 			setup: func(e *stEnv) { e.inner.FailSave(errStBoom) },
 		},
 		{
-			name:  "second save fails",
-			setup: func(e *stEnv) { e.store.failOn = 2 },
-			// The slot exists by then; the next start recreates it from the state file.
+			name:      "second save fails",
+			setup:     func(e *stEnv) { e.store.failOn = 2 },
 			wantSaves: 1, wantSlots: 1,
 		},
 		{

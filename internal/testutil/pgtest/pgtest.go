@@ -19,26 +19,18 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-// Environment and defaults.
 const (
-	// EnvVersion selects the Postgres major version (make test-integration
-	// PG=<n> exports it).
-	EnvVersion = "WAKE_TEST_PG"
-	// DefaultVersion is used when EnvVersion is unset.
+	EnvVersion     = "WAKE_TEST_PG"
 	DefaultVersion = "17"
-	// Password is the password of the superuser and of roles made by
-	// CreateRole.
-	Password = "wake"
+	Password       = "wake"
 
 	superuser      = "postgres"
 	startupTimeout = 3 * time.Minute
 	opTimeout      = time.Minute
 )
 
-// ErrBadVersion reports an invalid WAKE_TEST_PG value.
 var ErrBadVersion = errors.New("pgtest: bad postgres version")
 
-// Image returns the container image for the version in WAKE_TEST_PG.
 func Image() (string, error) {
 	return imageFor(os.Getenv(EnvVersion))
 }
@@ -53,8 +45,6 @@ func imageFor(v string) (string, error) {
 	return "postgres:" + v, nil
 }
 
-// Command is the postgres command line: logical decoding enabled, small
-// memory footprint, no durability (throw-away data).
 func Command() []string {
 	return []string{
 		"postgres",
@@ -74,9 +64,8 @@ func Command() []string {
 type Server struct {
 	ctr      *tcpostgres.PostgresContainer
 	hostPort string
-	// Image is the container image, e.g. postgres:17.
-	Image string
-	seq   atomic.Uint64
+	Image    string
+	seq      atomic.Uint64
 }
 
 // Start runs the container and waits until it accepts connections.
@@ -106,7 +95,6 @@ func Start(ctx context.Context) (*Server, error) {
 	return &Server{ctr: ctr, hostPort: hostPort, Image: img}, nil
 }
 
-// Terminate stops and removes the container.
 func (s *Server) Terminate() error {
 	if err := testcontainers.TerminateContainer(s.ctr); err != nil {
 		return fmt.Errorf("pgtest: terminate: %w", err)
@@ -114,8 +102,7 @@ func (s *Server) Terminate() error {
 	return nil
 }
 
-// Main starts the server, stores it in *srv, runs the tests and terminates
-// the container. Use it as os.Exit(pgtest.Main(m, &srv)) in TestMain.
+// Main starts the server, runs the tests and terminates the container.
 func Main(m *testing.M, srv **Server) int {
 	s, err := Start(context.Background())
 	if err != nil {
@@ -133,7 +120,6 @@ func Main(m *testing.M, srv **Server) int {
 	return code
 }
 
-// DSN returns the URL of a database for a role with Password.
 func (s *Server) DSN(database, role string) string {
 	return dsn(s.hostPort, database, role)
 }
@@ -146,22 +132,18 @@ func dsn(hostPort, database, role string) string {
 	return u.String()
 }
 
-// unique returns a name unique within the server: prefix_<n>.
 func (s *Server) unique(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, s.seq.Add(1))
 }
 
 // Database is a database created for one test.
 type Database struct {
-	srv *Server
-	// Name is the database name.
+	srv  *Server
 	Name string
-	// DSN connects to it as the superuser.
-	DSN string
+	DSN  string
 }
 
-// NewDatabase creates a fresh database; it is dropped (with its
-// replication slots) when the test ends.
+// NewDatabase creates a fresh database that is dropped when the test ends.
 func (s *Server) NewDatabase(tb testing.TB) *Database {
 	tb.Helper()
 	name := s.unique("db")
@@ -192,12 +174,8 @@ func (s *Server) NewDatabase(tb testing.TB) *Database {
 	return &Database{srv: s, Name: name, DSN: s.DSN(name, superuser)}
 }
 
-// RoleDSN returns the URL of the database for role (password Password).
 func (d *Database) RoleDSN(role string) string { return d.srv.DSN(d.Name, role) }
 
-// CreateRole creates a login role with password Password, unique within
-// the server, with extra attributes such as "REPLICATION" (empty for
-// none). It returns the role name.
 func (d *Database) CreateRole(tb testing.TB, prefix, attrs string) string {
 	tb.Helper()
 	name := d.srv.unique(prefix)
@@ -205,19 +183,16 @@ func (d *Database) CreateRole(tb testing.TB, prefix, attrs string) string {
 	return name
 }
 
-// Exec runs SQL statements as the superuser and fails the test on error.
 func (d *Database) Exec(tb testing.TB, sql string, args ...any) {
 	tb.Helper()
 	execOn(tb, d.DSN, sql, args...)
 }
 
-// Conn opens a connection as the superuser, closed when the test ends.
 func (d *Database) Conn(tb testing.TB) *pgx.Conn {
 	tb.Helper()
 	return Connect(tb, d.DSN)
 }
 
-// Connect opens a connection with dsn, closed when the test ends.
 func Connect(tb testing.TB, dsn string) *pgx.Conn {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
@@ -234,7 +209,6 @@ func Connect(tb testing.TB, dsn string) *pgx.Conn {
 
 func execOn(tb testing.TB, dsn, sql string, args ...any) {
 	tb.Helper()
-	// WithoutCancel: Exec also runs in cleanups, after tb.Context ends.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(tb.Context()), opTimeout)
 	defer cancel()
 	conn, err := pgx.Connect(ctx, dsn)

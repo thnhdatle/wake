@@ -55,7 +55,6 @@ func (s Sink) validate(v *validator, key string) {
 	s.rejectForeignSections(v, key)
 }
 
-// rejectForeignSections flags a sub-section that does not belong to the type.
 func (s Sink) rejectForeignSections(v *validator, key string) {
 	for _, sec := range []struct {
 		name    string
@@ -140,7 +139,6 @@ func validatePrefix(v *validator, key, prefix string) {
 	}
 }
 
-// validateNATSURL accepts one URL or a comma-separated list.
 func validateNATSURL(v *validator, key, raw string) {
 	if strings.TrimSpace(raw) == "" {
 		v.add(key, "required")

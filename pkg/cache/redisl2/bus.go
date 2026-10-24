@@ -16,37 +16,26 @@ import (
 )
 
 const (
-	// defaultHealthCheck is the bus health-check interval when the config
-	// leaves it unset; minHealthCheck bounds PING traffic.
 	defaultHealthCheck = time.Second
 	minHealthCheck     = 10 * time.Millisecond
-	// Reconnect backoff: exponential from backoffMin to backoffMax, with
-	// jitter in [d/2, d).
-	backoffMin = 50 * time.Millisecond
-	backoffMax = 2 * time.Second
+	backoffMin         = 50 * time.Millisecond
+	backoffMax         = 2 * time.Second
 )
 
-// bus owns the subscription connection. One goroutine (run) reads it and
-// hands each event to receive over an unbuffered channel, so nothing is
-// queued in the process: a consumer that falls behind stops the reads and
-// Redis' client-output-buffer-limit eventually drops the connection, which
-// is reported as a disconnect.
 type bus struct {
 	client  redis.UniversalClient
 	channel string
 	health  time.Duration
 
-	events chan l2.Event  // unbuffered
-	done   chan struct{}  // closed by close
-	cancel func()         // ends run's context
-	wg     sync.WaitGroup // waits for run
+	events chan l2.Event
+	done   chan struct{}
+	cancel func()
+	wg     sync.WaitGroup
 
-	mu     sync.Mutex // protects ps and closed
+	mu     sync.Mutex
 	ps     *redis.PubSub
 	closed bool
 
-	// connected is owned by run: an EventConnected was emitted and no
-	// EventDisconnected since.
 	connected bool
 	closeOnce sync.Once
 }
@@ -85,7 +74,6 @@ func (b *bus) receive(ctx context.Context) (l2.Event, error) {
 	}
 }
 
-// close stops run and closes the subscription; it is idempotent.
 func (b *bus) close() {
 	b.closeOnce.Do(func() {
 		close(b.done)
@@ -95,14 +83,12 @@ func (b *bus) close() {
 		ps := b.ps
 		b.mu.Unlock()
 		if ps != nil {
-			_ = ps.Close() // unblocks a pending read; run closes it too
+			_ = ps.Close()
 		}
 		b.wg.Wait()
 	})
 }
 
-// run keeps one subscription alive until close: open, serve until the link
-// fails, report the disconnect, back off, repeat.
 func (b *bus) run(ctx context.Context) {
 	defer b.wg.Done()
 	failures := 0
@@ -126,16 +112,13 @@ func (b *bus) run(ctx context.Context) {
 			return
 		}
 		if healthy {
-			failures = 1 // reconnect promptly after a working link broke
+			failures = 1
 		} else {
 			failures++
 		}
 	}
 }
 
-// open creates a subscription to the channel; nil once closed. Creating the
-// PubSub does no I/O; Subscribe registers the channel even when it cannot
-// connect, and ReceiveTimeout then reports the connection error.
 func (b *bus) open(ctx context.Context) *redis.PubSub {
 	ps := b.client.Subscribe(ctx)
 	b.mu.Lock()
@@ -146,7 +129,7 @@ func (b *bus) open(ctx context.Context) *redis.PubSub {
 	}
 	b.ps = ps
 	b.mu.Unlock()
-	_ = ps.Subscribe(ctx, b.channel) // errors resurface from ReceiveTimeout
+	_ = ps.Subscribe(ctx, b.channel)
 	return ps
 }
 
@@ -156,12 +139,9 @@ func (b *bus) release(ps *redis.PubSub) {
 		b.ps = nil
 	}
 	b.mu.Unlock()
-	_ = ps.Close() // ErrClosed when close got there first
+	_ = ps.Close()
 }
 
-// serve reads ps until the link fails or ctx ends, and reports whether the
-// subscription was confirmed. After health of silence it sends PING; a
-// second silent interval means the link is dead.
 func (b *bus) serve(ctx context.Context, ps *redis.PubSub) bool {
 	confirmed, pinged := false, false
 	for {
@@ -183,10 +163,6 @@ func (b *bus) serve(ctx context.Context, ps *redis.PubSub) bool {
 	}
 }
 
-// handle turns one pub/sub reply into events; false when ctx ended. Every
-// "subscribe" confirmation means a new connection: one that follows an
-// already reported connection (go-redis reconnected by itself) is reported
-// as a disconnect first, since messages may have been lost in between.
 func (b *bus) handle(ctx context.Context, msg any, confirmed *bool) bool {
 	switch m := msg.(type) {
 	case *redis.Subscription:
@@ -205,11 +181,11 @@ func (b *bus) handle(ctx context.Context, msg any, confirmed *bool) bool {
 		}
 		ev, err := l2.DecodeMessage(m.Payload)
 		if err != nil {
-			return true // foreign or garbage message on the channel: skipped
+			return true
 		}
 		return b.emit(ctx, ev)
 	}
-	return true // *redis.Pong
+	return true
 }
 
 func (b *bus) emit(ctx context.Context, ev l2.Event) bool {
@@ -226,7 +202,6 @@ func isTimeout(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
-// backoff returns the delay before reconnect attempt n (n >= 1).
 func backoff(n int) time.Duration {
 	d := backoffMax
 	if n <= 10 {

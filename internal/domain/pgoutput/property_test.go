@@ -107,8 +107,6 @@ func genMessage(t *rapid.T) pgoutput.Message {
 	}
 }
 
-// TestParse_EncodeDecodeRoundTrip: Parse inverts the protocol encoding for
-// every message type, relation and tuple shape.
 func TestParse_EncodeDecodeRoundTrip(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
@@ -119,8 +117,6 @@ func TestParse_EncodeDecodeRoundTrip(t *testing.T) {
 	})
 }
 
-// normalize maps nil and empty byte slices and tuples to one form, which
-// the wire encoding cannot distinguish.
 func normalize(m pgoutput.Message) pgoutput.Message {
 	fix := func(t pgoutput.Tuple) {
 		for i := range t {
@@ -149,8 +145,6 @@ func normalize(m pgoutput.Message) pgoutput.Message {
 	return m
 }
 
-// TestParse_ArbitraryBytesNeverPanic: any input yields a message or a
-// classified error.
 func TestParse_ArbitraryBytesNeverPanic(t *testing.T) {
 	t.Parallel()
 	types := []byte("BCORYIUDTMSEcAbPKrpx")
@@ -165,8 +159,6 @@ func TestParse_ArbitraryBytesNeverPanic(t *testing.T) {
 	})
 }
 
-// toastCase draws a relation of int4 columns with a consistent identity and
-// an update whose tuples follow what Postgres can send for it.
 func toastCase(t *rapid.T) (*pgoutput.Relation, *pgoutput.Update) {
 	n := rapid.IntRange(1, 6).Draw(t, "columns")
 	identity := rapid.SampledFrom([]schema.ReplicaIdentity{'d', 'f', 'i'}).Draw(t, "identity")
@@ -206,9 +198,6 @@ func toastCase(t *rapid.T) (*pgoutput.Relation, *pgoutput.Update) {
 	return rel, up
 }
 
-// TestDecoder_RowImages_ToastRules checks the TOAST rules: FULL
-// never emits unchanged_columns; otherwise a column is never both in after
-// and in unchanged_columns, and together they cover every column.
 func TestDecoder_RowImages_ToastRules(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {

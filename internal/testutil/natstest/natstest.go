@@ -21,8 +21,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/tlsgen"
 )
 
-// DefaultImage is the NATS image of deploy/docker-compose.yml; the
-// WAKE_TEST_NATS_IMAGE environment variable overrides it.
 const DefaultImage = "nats:2-alpine"
 
 const (
@@ -35,22 +33,17 @@ const (
 	memoryLimit  = 256 << 20
 )
 
-// NATS is a single JetStream server in a container, reached through a
-// loopback proxy so it survives restarts on a new host port.
+// NATS is a JetStream server in a container.
 type NATS struct {
-	ctr   *testcontainers.DockerContainer
-	proxy *tcpproxy.Proxy
-	trust *trust
-	dir   string
-	// URL is the client URL (nats://127.0.0.1:<port>).
-	URL string
-	// TLS holds the certificates when the server requires TLS.
-	TLS *tlsgen.Bundle
-	// CredsFile is a valid user credentials file in operator mode.
+	ctr       *testcontainers.DockerContainer
+	proxy     *tcpproxy.Proxy
+	trust     *trust
+	dir       string
+	URL       string
+	TLS       *tlsgen.Bundle
 	CredsFile string
 }
 
-// Option configures Start.
 type Option func(*options)
 
 type options struct {
@@ -59,14 +52,10 @@ type options struct {
 	maxPayload int
 }
 
-// WithTLS makes the server require TLS with tlsgen certificates.
 func WithTLS() Option { return func(o *options) { o.tls = true } }
 
-// WithCredentials runs the server in operator mode (memory resolver) so
-// clients authenticate with a credentials file (CredsFile, NewCredsFile).
 func WithCredentials() Option { return func(o *options) { o.creds = true } }
 
-// WithMaxPayload sets the server's max_payload.
 func WithMaxPayload(n int) Option { return func(o *options) { o.maxPayload = n } }
 
 // Start runs a JetStream server for the test and terminates it at the end.
@@ -147,7 +136,6 @@ func (n *NATS) retarget(ctx context.Context, tb testing.TB) {
 	n.proxy.SetTarget(addr)
 }
 
-// waitReady connects until JetStream answers.
 func (n *NATS) waitReady(tb testing.TB) {
 	tb.Helper()
 	deadline := time.Now().Add(readyTimeout)
@@ -186,8 +174,6 @@ func (n *NATS) ping(tb testing.TB) error {
 	return nil
 }
 
-// ClientOpts returns the nats.go options of a test client: the CA and
-// client certificate, and CredsFile.
 func (n *NATS) ClientOpts(tb testing.TB) []nats.Option {
 	tb.Helper()
 	opts := []nats.Option{nats.Name("wake-test"), nats.Timeout(5 * time.Second)}
@@ -200,7 +186,6 @@ func (n *NATS) ClientOpts(tb testing.TB) []nats.Option {
 	return opts
 }
 
-// Connect returns a test client closed at the end of the test.
 func (n *NATS) Connect(tb testing.TB) *nats.Conn {
 	tb.Helper()
 	nc, err := nats.Connect(n.URL, append(n.ClientOpts(tb), nats.MaxReconnects(-1))...)
@@ -211,7 +196,6 @@ func (n *NATS) Connect(tb testing.TB) *nats.Conn {
 	return nc
 }
 
-// JetStream returns a JetStream context of a test client.
 func (n *NATS) JetStream(tb testing.TB) jetstream.JetStream {
 	tb.Helper()
 	js, err := jetstream.New(n.Connect(tb))
@@ -221,7 +205,6 @@ func (n *NATS) JetStream(tb testing.TB) jetstream.JetStream {
 	return js
 }
 
-// NewCredsFile writes the credentials of another valid user.
 func (n *NATS) NewCredsFile(tb testing.TB, name string) string {
 	tb.Helper()
 	if n.trust == nil {
@@ -230,8 +213,6 @@ func (n *NATS) NewCredsFile(tb testing.TB, name string) string {
 	return n.trust.userCreds(tb, n.dir, name, n.trust.account)
 }
 
-// ForeignCredsFile writes the credentials of a user of an account the
-// server does not know, which the server rejects.
 func (n *NATS) ForeignCredsFile(tb testing.TB, name string) string {
 	tb.Helper()
 	if n.trust == nil {
@@ -240,14 +221,10 @@ func (n *NATS) ForeignCredsFile(tb testing.TB, name string) string {
 	return n.trust.userCreds(tb, n.dir, name, mustKey(tb, nkeys.CreateAccount))
 }
 
-// Outage drops every connection to the server until Restore.
 func (n *NATS) Outage() { n.proxy.Down() }
 
-// Restore ends an Outage.
 func (n *NATS) Restore() { n.proxy.Up() }
 
-// Restart stops the container, starts it again on its JetStream data and
-// waits until it serves requests.
 func (n *NATS) Restart(tb testing.TB) {
 	tb.Helper()
 	ctx, cancel := context.WithTimeout(tb.Context(), startTimeout)

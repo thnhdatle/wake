@@ -19,37 +19,23 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// Defaults of the sink (see the bounds documented in doc.go).
 const (
-	// DefaultMaxEventBytes is max_event_bytes when the config leaves it 0
-	// (the broker's message.max.bytes default).
-	DefaultMaxEventBytes = 1 << 20
-	// DefaultMaxBufferedRecords bounds the events accepted by Send and not
-	// yet acknowledged.
+	DefaultMaxEventBytes      = 1 << 20
 	DefaultMaxBufferedRecords = 10_000
-	// DefaultMaxBufferedBytes bounds their event bytes.
-	DefaultMaxBufferedBytes = 64 << 20
-	// DefaultStallTimeout is how long records may wait for an
-	// acknowledgement before Health reports retrying.
-	DefaultStallTimeout = 10 * time.Second
-	// DefaultRequestTimeout bounds one metadata or topic-creation request
-	// and one connection attempt.
-	DefaultRequestTimeout = 10 * time.Second
-	// DefaultShutdownTimeout bounds the final flush when Run's context ends.
-	DefaultShutdownTimeout = 10 * time.Second
+	DefaultMaxBufferedBytes   = 64 << 20
+	DefaultStallTimeout       = 10 * time.Second
+	DefaultRequestTimeout     = 10 * time.Second
+	DefaultShutdownTimeout    = 10 * time.Second
 )
 
 const (
 	unknownTopicRetries = 4
-	// fanoutAllowance leaves franz-go room for `t` fan-out and tombstone
-	// records beyond two records per buffered event.
-	fanoutAllowance = 1 << 16
-	minBatchBytes   = 1 << 10
-	maxBatchBytes   = 100 << 20 // franz-go's default broker write limit
+	fanoutAllowance     = 1 << 16
+	minBatchBytes       = 1 << 10
+	maxBatchBytes       = 100 << 20
 )
 
-// Sink is the Kafka sink. Send, Health and Name are safe for concurrent
-// use; Run is called once.
+// Sink writes events to Kafka and acknowledges them once Kafka does.
 type Sink struct {
 	name          string
 	prefix        string
@@ -74,27 +60,26 @@ type Sink struct {
 	newClient      clientFactory
 	running        atomic.Bool
 
-	slots  chan struct{}       // one token per accepted event; capacity maxRecords
-	bytes  *semaphore.Weighted // event bytes of accepted events
-	queue  chan *unit          // accepted events not yet taken by the dispatcher; capacity maxRecords
-	notify chan struct{}       // capacity 1: wakes the dispatcher after a failure or when idle
+	slots  chan struct{}
+	bytes  *semaphore.Weighted
+	queue  chan *unit
+	notify chan struct{}
 
-	randMu sync.Mutex // protects rnd
+	randMu sync.Mutex
 	rnd    *rand.Rand
 
-	mu          sync.Mutex // protects every field below
-	accepted    int        // events accepted by Send and not yet acknowledged
-	inflight    int        // writes handed to franz-go and not yet completed
-	recovering  int        // re-produced writes not yet completed
-	failed      []*write   // failed writes waiting for re-production
-	closing     bool       // Run is shutting down; failures are dropped
+	mu          sync.Mutex
+	accepted    int
+	inflight    int
+	recovering  int
+	failed      []*write
+	closing     bool
 	topics      map[string]topicInfo
-	progress    time.Time // last acknowledgement, or when inflight became non-zero
+	progress    time.Time
 	lastConnErr error
 	health      healthTracker
 }
 
-// Option configures a Sink.
 type Option func(*options)
 
 type options struct {
@@ -109,37 +94,23 @@ type options struct {
 	newClient      clientFactory
 }
 
-// WithObserver receives the sink's metrics.
 func WithObserver(obs Observer) Option { return func(o *options) { o.observer = obs } }
 
-// WithAckObserver receives the ts_ms of every acknowledged event.
 func WithAckObserver(obs AckObserver) Option { return func(o *options) { o.ackObs = obs } }
 
-// WithRand sets the seeded source of backoff jitter (default: randomly
-// seeded).
 func WithRand(r *rand.Rand) Option { return func(o *options) { o.rnd = r } }
 
-// WithBackoff overrides the retry delays (default pipeline.Backoff{}:
-// 100 ms doubling up to 30 s, equal jitter).
 func WithBackoff(b pipeline.Backoff) Option { return func(o *options) { o.backoff = b } }
 
-// WithMaxBuffered bounds the events accepted by Send and not yet
-// acknowledged, by count and by event bytes (defaults
-// DefaultMaxBufferedRecords and DefaultMaxBufferedBytes). Send blocks at
-// either bound. Non-positive values keep the default.
 func WithMaxBuffered(records int, bytes int64) Option {
 	return func(o *options) { o.maxRecords, o.maxBytes = records, bytes }
 }
 
-// WithStallTimeout overrides DefaultStallTimeout.
 func WithStallTimeout(d time.Duration) Option { return func(o *options) { o.stallTimeout = d } }
 
-// WithRequestTimeout overrides DefaultRequestTimeout.
 func WithRequestTimeout(d time.Duration) Option { return func(o *options) { o.requestTimeout = d } }
 
-// New validates cfg (a sink of type kafka), loads its TLS files and reads
-// the SASL credentials from the environment variables it names through
-// getenv. It starts nothing; Run connects.
+// New returns a Kafka Sink for the given config.
 func New(
 	cfg config.Sink, getenv func(string) string, clk clock.Clock, log *slog.Logger, opts ...Option,
 ) (*Sink, error) {
@@ -224,7 +195,6 @@ func validate(cfg *config.Sink) error {
 	return errors.Join(errs...)
 }
 
-// validLayout accepts -1 (broker default) or 1..limit.
 func validLayout(n, limit int) bool { return n == -1 || (n >= 1 && n <= limit) }
 
 func orDefault[T int | int64 | time.Duration](v, def T) T {
@@ -234,20 +204,15 @@ func orDefault[T int | int64 | time.Duration](v, def T) T {
 	return v
 }
 
-// Name implements pipeline.Sink.
 func (s *Sink) Name() string { return s.name }
 
-// Health implements pipeline.Sink.
 func (s *Sink) Health() pipeline.SinkHealth {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.health.current
 }
 
-// Send implements pipeline.Sink. It queues rec behind every record sent
-// before it and blocks while the sink holds its bound of unacknowledged
-// events or event bytes (backpressure, see WithMaxBuffered). It returns an
-// error only when ctx ends first.
+// Send queues one record for delivery and blocks while the buffer is full.
 func (s *Sink) Send(ctx context.Context, rec pipeline.Record) error {
 	u := newUnit(rec, s.prefix)
 	select {
@@ -265,11 +230,10 @@ func (s *Sink) Send(ctx context.Context, rec pipeline.Record) error {
 	n := s.accepted
 	s.mu.Unlock()
 	s.obs.SetInflight(s.name, n)
-	s.queue <- u // never blocks: the queue holds at most one event per slot
+	s.queue <- u
 	return nil
 }
 
-// signal wakes the dispatcher without blocking.
 func (s *Sink) signal() {
 	select {
 	case s.notify <- struct{}{}:
@@ -277,7 +241,6 @@ func (s *Sink) signal() {
 	}
 }
 
-// delay returns the jittered backoff of retry attempt.
 func (s *Sink) delay(attempt int) time.Duration {
 	s.randMu.Lock()
 	r := s.rnd.Float64()
@@ -285,7 +248,6 @@ func (s *Sink) delay(attempt int) time.Duration {
 	return s.backoff.Delay(attempt, r)
 }
 
-// sleep waits d or until ctx ends; it reports whether ctx is still live.
 func (s *Sink) sleep(ctx context.Context, d time.Duration) bool {
 	select {
 	case <-ctx.Done():

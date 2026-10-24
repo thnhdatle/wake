@@ -15,7 +15,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
-// SASL mechanisms of KafkaConfig.SASL.
+// SASL mechanisms.
 const (
 	SASLScramSHA256 = "SCRAM-SHA-256"
 	SASLScramSHA512 = "SCRAM-SHA-512"
@@ -23,44 +23,32 @@ const (
 
 // Kafka defaults.
 const (
-	// DefaultKafkaMaxBatch bounds the records handled per batch.
 	DefaultKafkaMaxBatch = 500
-	// maxTopicLength is Kafka's limit on topic names.
-	maxTopicLength = 249
-	// kafkaCommitTimeout bounds one offset commit.
-	kafkaCommitTimeout = 10 * time.Second
-	// kafkaMetadataMaxAge bounds how long a topic created after startup
-	// stays unnoticed.
-	kafkaMetadataMaxAge = 30 * time.Second
+	maxTopicLength       = 249
+	kafkaCommitTimeout   = 10 * time.Second
+	kafkaMetadataMaxAge  = 30 * time.Second
 )
 
-// KafkaConfig configures a KafkaSource; it mirrors the
-// cache_invalidator.kafka section of the Wake configuration.
+// KafkaConfig configures a KafkaSource.
 type KafkaConfig struct {
-	// Brokers is the seed broker list (host:port).
 	Brokers []string
-	// TopicPrefix is the producer's topic prefix: the source consumes
-	// "<TopicPrefix>.<schema>.<table>" for every mapped table.
+	// TopicPrefix is the producer's topic prefix.
 	TopicPrefix string
-	// Group is the consumer group.
-	Group string
-	// TLS enables TLS when non-nil.
-	TLS *tls.Config
-	// SASL enables SASL/SCRAM when its Mechanism is set.
-	SASL SASL
-	// MaxBatch bounds the records per batch (default DefaultKafkaMaxBatch).
+	Group       string
+	TLS         *tls.Config
+	SASL        SASL
+	// MaxBatch bounds the records per batch, DefaultKafkaMaxBatch by default.
 	MaxBatch int
 }
 
 // SASL holds SASL/SCRAM credentials.
 type SASL struct {
-	// Mechanism is "" (disabled), SASLScramSHA256 or SASLScramSHA512.
+	// Mechanism selects the SCRAM variant. Empty disables SASL.
 	Mechanism string
 	User      string
 	Password  string
 }
 
-// kafkaClient is the part of *kgo.Client the source uses.
 type kafkaClient interface {
 	PollRecords(ctx context.Context, maxPollRecords int) kgo.Fetches
 	CommitRecords(ctx context.Context, rs ...*kgo.Record) error
@@ -70,14 +58,6 @@ type kafkaClient interface {
 }
 
 // KafkaSource consumes CDC events from Kafka as a member of a consumer group.
-// Records are handled in poll order, which keeps the order of each
-// partition; offsets are committed (synchronously, after the handler
-// returned nil) only for records that were handled. Rebalances are held back
-// while a batch is in flight (BlockRebalanceOnPoll), so a commit never
-// covers a partition the member no longer owns. Without a committed offset
-// a partition is read from its start, so keys cached before the first run
-// are invalidated too. Topics that do not exist yet are picked up within
-// 30 s of their creation.
 type KafkaSource struct {
 	topics    []string
 	kopts     []kgo.Opt
@@ -86,12 +66,11 @@ type KafkaSource struct {
 	newClient func(opts ...kgo.Opt) (kafkaClient, error)
 
 	mu       sync.Mutex
-	client   kafkaClient // non-nil while consuming; guarded by mu
-	fetchErr error       // last fetch error, nil after a clean poll; guarded by mu
+	client   kafkaClient
+	fetchErr error
 }
 
-// NewKafkaSource validates cfg and returns a source for the topics of the
-// mapped tables. It starts nothing; the client is created by Consume.
+// NewKafkaSource validates cfg and returns a source for the topics of the mapped tables.
 func NewKafkaSource(cfg KafkaConfig, mapping *Mapping, opts ...SourceOption) (*KafkaSource, error) {
 	if mapping == nil {
 		return nil, invalidConfig("kafka: nil mapping")
@@ -176,8 +155,7 @@ func (c *KafkaConfig) validate() error {
 // Topics returns the consumed topics, sorted.
 func (s *KafkaSource) Topics() []string { return append([]string(nil), s.topics...) }
 
-// Consume implements Source. It returns nil when ctx ends and an error when
-// the handler fails or the client cannot be created.
+// Consume implements Source.
 func (s *KafkaSource) Consume(ctx context.Context, handle Handler) error {
 	cl, err := s.newClient(s.kopts...)
 	if err != nil {
@@ -205,8 +183,6 @@ func (s *KafkaSource) Consume(ctx context.Context, handle Handler) error {
 	}
 }
 
-// process hands one polled batch to handle and commits it on success. The
-// rebalance held back by the poll is allowed once the batch is done.
 func (s *KafkaSource) process(ctx context.Context, cl kafkaClient, recs []*kgo.Record, handle Handler) error {
 	defer cl.AllowRebalance()
 	if len(recs) == 0 {
@@ -219,12 +195,9 @@ func (s *KafkaSource) process(ctx context.Context, cl kafkaClient, recs []*kgo.R
 	if err := handle(ctx, payloads); err != nil {
 		return err
 	}
-	// The records are handled: commit even if shutdown started meanwhile.
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), kafkaCommitTimeout)
 	defer cancel()
 	if err := cl.CommitRecords(cctx, recs...); err != nil {
-		// The next commit covers these offsets; after a rebalance the new
-		// owner handles them again (invalidation is idempotent).
 		s.log.Warn("kafka offset commit failed", "error", err, "count", len(recs))
 	}
 	return nil
@@ -254,8 +227,7 @@ func (s *KafkaSource) setClient(cl kafkaClient) {
 	s.fetchErr = nil
 }
 
-// Check reports whether the source is consuming, a broker answers and the
-// last poll had no fetch error.
+// Check reports whether the source is consuming and a broker answers.
 func (s *KafkaSource) Check(ctx context.Context) error {
 	s.mu.Lock()
 	cl, fetchErr := s.client, s.fetchErr

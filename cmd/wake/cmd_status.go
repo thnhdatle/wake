@@ -56,8 +56,6 @@ func newStatusCmd(cfgPath *string) *cobra.Command {
 	return c
 }
 
-// fallbackStatus builds the status document from the state file and the
-// slot row, without a running instance.
 func fallbackStatus(ctx context.Context, cfg *config.Config) (*statusDoc, error) {
 	if err := requireSourceName(cfg); err != nil {
 		return nil, err
@@ -100,7 +98,6 @@ func querySlot(ctx context.Context, dsn, slot string) (pipeline.SlotStatus, erro
 	return cat.Slot(ctx, slot)
 }
 
-// printJSON writes JSON indented, followed by a newline.
 func printJSON(w io.Writer, raw []byte) error {
 	var buf bytes.Buffer
 	if err := json.Indent(&buf, raw, "", "  "); err != nil {

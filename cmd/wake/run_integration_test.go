@@ -12,9 +12,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/kafkatest"
 )
 
-// TestWake runs `wake run` end to end against one Postgres and one Kafka
-// container shared by the subtests (each with its own database, slot and
-// topic prefix).
 func TestWake(t *testing.T) { //nolint:paralleltest,tparallel // owns the shared Kafka; not parallel to other tests
 	k := kafkatest.Start(t)
 	tests := []struct {
@@ -40,9 +37,6 @@ func TestWake(t *testing.T) { //nolint:paralleltest,tparallel // owns the shared
 	}
 }
 
-// testInitialSnapshotUnderWrites checks the initial snapshot of a
-// table while writers run inserts, updates (also of the key) and deletes;
-// the replayed sink state (M2) equals Postgres.
 func testInitialSnapshotUnderWrites(e *env) {
 	t := e.t
 	e.createItems("items", 5000)

@@ -21,7 +21,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// knownOIDs samples the mapping table for the generic properties.
 var knownOIDs = []uint32{
 	schema.OIDInt2, schema.OIDInt4, schema.OIDInt8, schema.OIDOID, schema.OIDFloat4, schema.OIDFloat8,
 	schema.OIDBool, schema.OIDBytea, schema.OIDJSON, schema.OIDJSONB, schema.OIDNumeric, schema.OIDText,
@@ -91,8 +90,6 @@ func escapeBytea(raw []byte) []byte {
 	return b.Bytes()
 }
 
-// pgArrayElement quotes an element like array_out: quoted when needed, with
-// backslash escapes for '"' and '\'.
 func pgArrayElement(s *string) string {
 	if s == nil {
 		return "NULL"
@@ -148,7 +145,7 @@ func TestAppendJSON_TextArrayRoundTrip(t *testing.T) {
 func TestAppendJSON_TimestampTZSameInstant(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
-		unix := rapid.Int64Range(-62135596800+86400, 253402300799-86400).Draw(t, "unix") // local years 1..9999
+		unix := rapid.Int64Range(-62135596800+86400, 253402300799-86400).Draw(t, "unix")
 		micros := rapid.IntRange(0, 999999).Draw(t, "micros")
 		offset := rapid.IntRange(-15*3600, 15*3600).Draw(t, "offset")
 		if !rapid.Bool().Draw(t, "seconds offset") {
@@ -181,8 +178,6 @@ func pgOffset(secs int) string {
 	return out
 }
 
-// pgInterval renders an interval like Postgres EncodeInterval with
-// IntervalStyle postgres.
 func pgInterval(months, days int32, micros int64) string {
 	var parts []string
 	neg := false

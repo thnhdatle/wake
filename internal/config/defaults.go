@@ -4,7 +4,6 @@ package config
 
 import "time"
 
-// Defaults, as documented in docs/guides/configuration.md.
 const (
 	DefaultAdminListen      = "127.0.0.1:9093"
 	DefaultInvalidatorAdmin = "127.0.0.1:9096"
@@ -24,9 +23,7 @@ const (
 	brokerDefault             = -1
 )
 
-// Default returns the configuration with every default applied. It is not
-// valid on its own: source.name, tables.include (managed mode) and at least
-// one sink must be configured.
+// Default returns the configuration with every default applied.
 func Default() Config {
 	return Config{
 		Source: Source{
@@ -65,14 +62,10 @@ func Default() Config {
 	}
 }
 
-// DefaultBusChannel returns the default cache bus channel for a namespace.
 func DefaultBusChannel(namespace string) string { return DefaultBusChannelPrefix + namespace }
 
-// DefaultNATSStream returns the default JetStream stream name for a source.
 func DefaultNATSStream(sourceName string) string { return "wake_" + sourceName }
 
-// UnmarshalYAML presets the per-sink defaults, then reads the entry over them.
-// It uses the callback form so the decoder's strict (unknown key) mode applies.
 func (s *Sink) UnmarshalYAML(unmarshal func(any) error) error {
 	type plain Sink
 	p := plain{
@@ -88,7 +81,6 @@ func (s *Sink) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// UnmarshalYAML presets the kafka.* defaults, then reads the section over them.
 func (k *KafkaSink) UnmarshalYAML(unmarshal func(any) error) error {
 	type plain KafkaSink
 	p := plain{Tombstones: true, Partitions: brokerDefault, ReplicationFactor: brokerDefault}
@@ -99,7 +91,6 @@ func (k *KafkaSink) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// UnmarshalYAML presets the nats.* defaults, then reads the section over them.
 func (n *NATSSink) UnmarshalYAML(unmarshal func(any) error) error {
 	type plain NATSSink
 	p := plain{CreateStream: true, DuplicateWindow: Duration(defaultNATSDupWindow)}
@@ -110,7 +101,6 @@ func (n *NATSSink) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// UnmarshalYAML presets the webhook.* defaults, then reads the section over them.
 func (w *WebhookSink) UnmarshalYAML(unmarshal func(any) error) error {
 	type plain WebhookSink
 	p := plain{
@@ -125,9 +115,6 @@ func (w *WebhookSink) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// finalize fills the defaults that depend on other values: per-type sink
-// event limits, the NATS stream names and the cache bus channel. It runs
-// after files, env vars and flag overrides are merged.
 func (c *Config) finalize() {
 	for i := range c.Sinks {
 		s := &c.Sinks[i]
@@ -138,7 +125,6 @@ func (c *Config) finalize() {
 			case SinkWebhook:
 				s.MaxEventBytes = ByteSize(defaultWebhookMaxEvent)
 			case SinkNATS, SinkStdout:
-				// NATS: 0 = the server's max_payload; stdout has no limit.
 			}
 		}
 		if s.NATS != nil && s.NATS.Stream == "" && c.Source.Name != "" {

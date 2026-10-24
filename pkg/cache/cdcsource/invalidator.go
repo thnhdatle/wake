@@ -16,36 +16,24 @@ import (
 	"github.com/thnhdatle/wake/pkg/event"
 )
 
-// Deleter invalidates cache keys. cache.Cache[V] satisfies it. Delete must
-// return nil only once every key is invalid for every cache instance; any
-// error (cache.ErrDeferred included) makes the invalidator retry.
+// Deleter invalidates cache keys.
 type Deleter interface {
 	Delete(ctx context.Context, keys ...string) error
 }
 
-// Handler processes one batch of raw CDC event payloads in delivery order. A nil or
-// empty payload is a Kafka tombstone. It returns nil once every payload has
-// been handled; it retries failures itself and returns an error only when
-// ctx ends, in which case the batch must not be acknowledged.
+// Handler processes one batch of raw CDC event payloads in delivery order.
 type Handler func(ctx context.Context, payloads [][]byte) error
 
-// Source delivers CDC event payloads. Consume calls handle for each batch,
-// one batch at a time, and acknowledges a batch (Kafka offset commit, NATS
-// ack) only after handle returned nil. It returns when ctx ends (nil) or
-// when handle or the transport fails for good. KafkaSource and NATSSource
-// implement it. A Source that also has a method Check(ctx) error reports its
-// health through Invalidator.Ready.
+// Source delivers CDC event payloads.
 type Source interface {
 	Consume(ctx context.Context, handle Handler) error
 }
 
-// healthChecker is the optional health method of a Source.
 type healthChecker interface {
 	Check(ctx context.Context) error
 }
 
-// Invalidator consumes CDC events from a Source and deletes the cache keys
-// rendered from them.
+// Invalidator consumes CDC events from a Source and deletes the cache keys rendered from them.
 type Invalidator struct {
 	src     Source
 	mapping *Mapping
@@ -54,17 +42,13 @@ type Invalidator struct {
 	m       *metrics
 	running atomic.Bool
 
-	// rndMu guards opts.rnd, which is not safe for concurrent use.
 	rndMu sync.Mutex
 
-	mu sync.Mutex
-	// identity holds, per table, the non-key columns found missing from a
-	// before image (template_requires_full_identity); guarded by mu.
+	mu       sync.Mutex
 	identity map[string][]string
 }
 
-// New validates its arguments and returns an invalidator. It starts nothing;
-// call Run.
+// New validates its arguments and returns an invalidator.
 func New(src Source, mapping *Mapping, deleter Deleter, opts ...Option) (*Invalidator, error) {
 	switch {
 	case src == nil:
@@ -91,23 +75,18 @@ func New(src Source, mapping *Mapping, deleter Deleter, opts ...Option) (*Invali
 	}, nil
 }
 
-// Run consumes until ctx ends and returns nil then. It returns an error when
-// the source fails for good. Run may be called only once.
+// Run consumes until ctx ends and returns nil then.
 func (inv *Invalidator) Run(ctx context.Context) error {
 	if !inv.running.CompareAndSwap(false, true) {
 		return invalidConfig("Run called twice")
 	}
-	// An error after ctx ended is the shutdown itself, not a failure.
 	if err := inv.src.Consume(ctx, inv.handle); err != nil && ctx.Err() == nil {
 		return fmt.Errorf("cdcsource: consume: %w", err)
 	}
 	return nil
 }
 
-// Ready reports nil when no template_requires_full_identity condition was
-// raised and the source (when it has a Check method) is healthy. Otherwise it
-// returns the joined reasons; each identity problem is an *IdentityError.
-// The identity condition stays raised until the process restarts.
+// Ready reports whether the invalidator is healthy.
 func (inv *Invalidator) Ready(ctx context.Context) error {
 	var errs []error
 	inv.mu.Lock()
@@ -123,7 +102,6 @@ func (inv *Invalidator) Ready(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// handle is the Handler given to the source.
 func (inv *Invalidator) handle(ctx context.Context, payloads [][]byte) error {
 	var keys []string
 	seen := make(map[string]struct{})
@@ -149,7 +127,6 @@ func (inv *Invalidator) handle(ctx context.Context, payloads [][]byte) error {
 	return nil
 }
 
-// keysOf decodes one payload and returns its keys, or the reason to skip it.
 func (inv *Invalidator) keysOf(payload []byte) (keys []string, skip string) {
 	if event.IsKafkaTombstone(payload) {
 		return nil, reasonTombstone
@@ -183,10 +160,6 @@ func (inv *Invalidator) keysOf(payload []byte) (keys []string, skip string) {
 	return keys, ""
 }
 
-// checkIdentity raises template_requires_full_identity when the before image
-// of an update or delete lacks a referenced non-key column: it counts every
-// such event and logs once per table. Processing continues with the images
-// available.
 func (inv *Invalidator) checkIdentity(e *event.Event) {
 	missing := inv.mapping.missingFromBefore(e)
 	if len(missing) == 0 {
@@ -210,9 +183,6 @@ func (inv *Invalidator) checkIdentity(e *event.Event) {
 	}
 }
 
-// deleteWithRetry calls Delete until it returns nil, waiting a capped,
-// jittered, exponentially growing delay between attempts. It returns an
-// error only when ctx ends.
 func (inv *Invalidator) deleteWithRetry(ctx context.Context, keys []string) error {
 	for attempt := 0; ; attempt++ {
 		err := inv.deleteOnce(ctx, keys)
@@ -245,8 +215,6 @@ func (inv *Invalidator) deleteOnce(ctx context.Context, keys []string) error {
 	return inv.deleter.Delete(ctx, keys...)
 }
 
-// backoff returns the delay before retry attempt+1: uniform in [d/2, d]
-// with d = retryMin * 2^attempt capped at retryMax.
 func (inv *Invalidator) backoff(attempt int) time.Duration {
 	d := inv.opts.retryMax
 	if attempt < 32 {

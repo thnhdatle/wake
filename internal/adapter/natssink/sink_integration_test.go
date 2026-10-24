@@ -135,7 +135,6 @@ func (e *env) waitHealth(t *testing.T, state pipeline.SinkState) pipeline.SinkHe
 	return e.sink.Health()
 }
 
-// messages reads up to n messages of the stream in stream order.
 func (e *env) messages(t *testing.T, n int) []jetstream.Msg {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), longWait)
@@ -237,7 +236,7 @@ func testDedup(t *testing.T, n *natstest.NATS) {
 	e := runSink(t, n, sinkConfig(n, "dup"))
 	rec := rowEvent(change.OpCreate, 1, "users", "1")
 	e.send(t, rec, 1)
-	e.send(t, rec, 2) // the same id again, as after a restart
+	e.send(t, rec, 2)
 	e.send(t, rowEvent(change.OpUpdate, 2, "users", "1"), 3)
 	e.waitAcks(t, 3, longWait)
 	assert.Equal(t, uint64(2), e.streamInfo(t).State.Msgs, "Nats-Msg-Id deduplicates by event id")
@@ -282,8 +281,6 @@ func testMissingStream(t *testing.T, n *natstest.NATS) {
 	e.waitHealth(t, pipeline.SinkStateHealthy)
 }
 
-// keyedLoad sends n updates over keys keys, round robin, and returns the
-// tx numbers per key in send order.
 func keyedLoad(t *testing.T, e *env, n, keys int, between func(i int)) map[string][]uint64 {
 	t.Helper()
 	want := map[string][]uint64{}
@@ -299,8 +296,6 @@ func keyedLoad(t *testing.T, e *env, n, keys int, between func(i int)) map[strin
 	return want
 }
 
-// checkOrder verifies that the stream holds every sent id once and, per key,
-// in send order. The key is recovered from the id (tx % keys).
 func checkOrder(t *testing.T, msgs []jetstream.Msg, want map[string][]uint64, keys int) {
 	t.Helper()
 	byID := map[string]uint64{}

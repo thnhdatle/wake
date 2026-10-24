@@ -14,14 +14,13 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/tlsgen"
 )
 
-// TLS is a Redis node that accepts only TLS connections and requires a
-// client certificate signed by the test CA.
+// TLS is a Redis node that accepts only TLS connections.
 type TLS struct {
 	addr   string
 	bundle *tlsgen.Bundle
 }
 
-// StartTLS starts the TLS node; it is terminated when tb ends.
+// StartTLS starts the TLS node and terminates it when tb ends.
 func StartTLS(tb testing.TB) *TLS {
 	tb.Helper()
 	b := tlsgen.Generate(tb, "localhost", "127.0.0.1")
@@ -45,14 +44,10 @@ func StartTLS(tb testing.TB) *TLS {
 	return &TLS{addr: addr, bundle: b}
 }
 
-// Addr returns the host:port of the TLS listener.
 func (s *TLS) Addr() string { return s.addr }
 
-// Bundle returns the CA, server and client certificates.
 func (s *TLS) Bundle() *tlsgen.Bundle { return s.bundle }
 
-// Options returns client options (short timeouts, no retries) that verify
-// the server against the test CA and present the client certificate.
 func (s *TLS) Options(tb testing.TB) *redis.Options {
 	tb.Helper()
 	opt := clientOptions(nil)
@@ -61,7 +56,6 @@ func (s *TLS) Options(tb testing.TB) *redis.Options {
 	return opt
 }
 
-// Client returns a TLS client built from Options; it is closed when tb ends.
 func (s *TLS) Client(tb testing.TB) *redis.Client {
 	tb.Helper()
 	rdb := newClient(tb, s.Options(tb))

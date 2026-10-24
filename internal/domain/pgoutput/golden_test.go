@@ -30,21 +30,16 @@ var update = flag.Bool("update", false,
 	"rewrite testdata/golden, the synthesized testdata/pgoutput/*.bin inputs and testdata/fuzz/FuzzDecode")
 
 const (
-	// recordedDir holds real Postgres 17 traffic recorded by
-	// scripts/record_pgoutput.sh: one "<lsn> <xid> <hex>" line per message.
 	recordedDir  = "../../../testdata/pgoutput"
 	synthDir     = "testdata/pgoutput"
 	goldenDir    = "testdata/golden"
 	fuzzSeedsDir = "testdata/fuzz/FuzzDecode"
 )
 
-// appKeyColumns plays the app layer's catalog lookup: primary keys of
-// REPLICA IDENTITY FULL tables, which Relation messages cannot express.
 func appKeyColumns() map[string][]string {
 	return map[string][]string{"rec.docs_full": {"id"}, "syn.full_pk": {"id"}}
 }
 
-// readRecorded returns the messages of a recorded .hex file in WAL order.
 func readRecorded(tb testing.TB, path string) [][]byte {
 	tb.Helper()
 	f, err := os.Open(path)
@@ -67,8 +62,6 @@ func readRecorded(tb testing.TB, path string) [][]byte {
 	return msgs
 }
 
-// frame encodes messages as a .bin file: a big-endian uint32 length before
-// each message.
 func frame(msgs [][]byte) []byte {
 	var out []byte
 	for _, m := range msgs {
@@ -91,9 +84,6 @@ func unframe(tb testing.TB, data []byte) [][]byte {
 	return msgs
 }
 
-// replay runs messages through a Decoder and a schema Registry the way the
-// stream use case does and renders one JSON line per output: CDC events,
-// schema-change events, forwarded messages and the control messages.
 type replay struct {
 	dec     *pgoutput.Decoder
 	reg     *schema.Registry
@@ -264,7 +254,6 @@ func (r *replay) message(m *pgoutput.LogicalMessage) {
 	r.raw(msg.AppendJSON(nil))
 }
 
-// goldenCase is one input file and its golden output.
 type goldenCase struct {
 	name   string
 	golden string
@@ -284,8 +273,6 @@ func recordedCases(tb testing.TB) []goldenCase {
 	return cases
 }
 
-// TestMain rewrites the synthesized inputs under -update before any test
-// reads them.
 func TestMain(m *testing.M) {
 	flag.Parse()
 	if *update {
@@ -309,7 +296,6 @@ func writeSynthesized() error {
 	return nil
 }
 
-// synthCases reads the synthesized inputs testdata/pgoutput/*.bin.
 func synthCases(tb testing.TB) []goldenCase {
 	tb.Helper()
 	paths, err := filepath.Glob(filepath.Join(synthDir, "*.bin"))
@@ -357,8 +343,6 @@ func TestGolden_SynthesizedInputsUpToDate(t *testing.T) {
 	}
 }
 
-// fuzzSeeds returns the FuzzDecode seed corpus: every recorded and
-// synthesized message plus truncated copies.
 func fuzzSeeds(tb testing.TB) map[string][]byte {
 	tb.Helper()
 	seeds := map[string][]byte{}
@@ -404,8 +388,6 @@ func TestGolden_FuzzCorpusUpToDate(t *testing.T) {
 	}
 }
 
-// removeStaleSeeds deletes generated seeds (named after an input file) that
-// are no longer produced; inputs saved by the fuzzer itself are kept.
 func removeStaleSeeds(t *testing.T, seeds map[string][]byte) {
 	t.Helper()
 	entries, err := os.ReadDir(fuzzSeedsDir)

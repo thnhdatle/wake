@@ -12,8 +12,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pgoutput"
 )
 
-// fuzzRelations returns every Relation and Type message of the recorded and
-// synthesized inputs, so fuzzed row messages reach RowImages.
 func fuzzRelations(f *testing.F) [][]byte {
 	f.Helper()
 	var out [][]byte
@@ -36,11 +34,6 @@ func fuzzRelations(f *testing.F) [][]byte {
 	return out
 }
 
-// FuzzDecode feeds arbitrary bytes to a Decoder that knows the relations of
-// the golden inputs and converts row messages to images and CDC events. It
-// must never panic; errors must be classified, and produced events must be
-// valid JSON. Seeds: testdata/fuzz/FuzzDecode (every recorded and
-// synthesized message, regenerated with -update).
 func FuzzDecode(f *testing.F) {
 	relations := fuzzRelations(f)
 	f.Fuzz(func(t *testing.T, data []byte) {

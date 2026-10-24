@@ -23,20 +23,15 @@ import (
 	"github.com/thnhdatle/wake/internal/platform/clock"
 )
 
-// Defaults of the webhook.* options, applied when a field is zero.
 const (
 	DefaultTimeout       = 10 * time.Second
 	DefaultMaxAttempts   = 10
 	DefaultMaxEventBytes = 10 << 20
 )
 
-// queueFactor sizes the default queue: lanes × max_events × queueFactor
-// records, so every lane can have a full batch queued behind the one in
-// flight.
 const queueFactor = 2
 
-// Sink is the webhook sink. Send, Health and Name are safe for concurrent
-// use; Run is called once.
+// Sink delivers events to a webhook and acknowledges each one after a successful delivery.
 type Sink struct {
 	name          string
 	url           string
@@ -52,22 +47,21 @@ type Sink struct {
 	log           *slog.Logger
 	obs           Observer
 	ackObs        AckObserver
-	notify        chan struct{} // capacity 1: wakes the dispatcher in Run
+	notify        chan struct{}
 	started       atomic.Bool
 
-	randMu sync.Mutex // protects rnd
+	randMu sync.Mutex
 	rnd    *rand.Rand
 
-	mu          sync.Mutex // protects every field below
+	mu          sync.Mutex
 	sched       *pipeline.LaneScheduler
 	queuedBytes int
-	firstQueued time.Time     // when the queue last became non-empty
-	space       chan struct{} // closed and replaced when queued records leave
+	firstQueued time.Time
+	space       chan struct{}
 	inflight    int
 	health      healthTracker
 }
 
-// Option configures a Sink.
 type Option func(*options)
 
 type options struct {
@@ -78,27 +72,17 @@ type options struct {
 	capacity int
 }
 
-// WithObserver receives the sink's metrics.
 func WithObserver(obs Observer) Option { return func(o *options) { o.observer = obs } }
 
-// WithAckObserver receives the ts_ms of every delivered event.
 func WithAckObserver(obs AckObserver) Option { return func(o *options) { o.ackObs = obs } }
 
-// WithRand sets the seeded source of backoff jitter (default: randomly
-// seeded).
 func WithRand(r *rand.Rand) Option { return func(o *options) { o.rnd = r } }
 
-// WithBackoff overrides the retry delays (default pipeline.Backoff{}:
-// 100 ms doubling up to 30 s, equal jitter).
 func WithBackoff(b pipeline.Backoff) Option { return func(o *options) { o.backoff = b } }
 
-// WithQueueCapacity bounds the queued records (default lanes × max_events ×
-// 2). Send blocks while the queue is full.
 func WithQueueCapacity(n int) Option { return func(o *options) { o.capacity = n } }
 
-// New validates cfg (a sink of type webhook), reads the signing secret from
-// the environment variable named by webhook.secret_env through getenv, and
-// builds the sink. It starts nothing.
+// New returns a webhook Sink for the given config.
 func New(
 	cfg config.Sink, getenv func(string) string, clk clock.Clock, log *slog.Logger, opts ...Option,
 ) (*Sink, error) {
@@ -206,29 +190,20 @@ func newClient(timeout time.Duration, lanes int) *http.Client {
 			ExpectContinueTimeout: time.Second,
 			TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
 		},
-		Timeout: timeout,
-		// A redirect is a misconfigured URL: it is reported as a poison
-		// status instead of being followed (a 301/302 would turn the POST
-		// into a GET).
+		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 }
 
-// Name implements pipeline.Sink.
 func (s *Sink) Name() string { return s.name }
 
-// Health implements pipeline.Sink.
 func (s *Sink) Health() pipeline.SinkHealth {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.health.current
 }
 
-// Send implements pipeline.Sink. It queues rec behind every record sent
-// before it and blocks while the queue holds its capacity (backpressure). A
-// record above max_event_bytes is never queued: Send blocks with Health
-// event_too_large until ctx ends, since only a configuration change on
-// restart can fix it.
+// Send queues one record for delivery.
 func (s *Sink) Send(ctx context.Context, rec pipeline.Record) error {
 	if len(rec.Payload) > s.maxEventBytes {
 		return s.blockTooLarge(ctx, &rec)
@@ -276,7 +251,6 @@ func (s *Sink) blockTooLarge(ctx context.Context, rec *pipeline.Record) error {
 	return fmt.Errorf("webhooksink %s: %w: %w", s.name, ErrEventTooLarge, ctx.Err())
 }
 
-// wake nudges the dispatcher without blocking.
 func (s *Sink) wake() {
 	select {
 	case s.notify <- struct{}{}:
@@ -299,7 +273,6 @@ func (s *Sink) newDeliveryID() (string, error) {
 	return id.String(), nil
 }
 
-// truncate renders a key for logs and health reasons, at most 256 bytes.
 func truncate(key []byte) string {
 	const limit = 256
 	if key == nil {

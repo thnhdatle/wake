@@ -14,8 +14,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2fake"
 )
 
-// TestClient_Conformance runs the shared l2 contract suite against the fake,
-// the same suite pkg/cache/redisl2 runs against real Redis.
 func TestClient_Conformance(t *testing.T) {
 	t.Parallel()
 	l2test.Run(t, func(t *testing.T) l2test.Harness {
@@ -25,7 +23,6 @@ func TestClient_Conformance(t *testing.T) {
 	})
 }
 
-// fakeHarness is one fake server with its own fake clock.
 type fakeHarness struct {
 	clk *clock.Fake
 	srv *l2fake.Server

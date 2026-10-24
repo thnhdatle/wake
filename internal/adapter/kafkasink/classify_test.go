@@ -79,7 +79,6 @@ func TestClassify(t *testing.T) {
 
 func TestMurmur2_MatchesKafka(t *testing.T) {
 	t.Parallel()
-	// Vectors from Kafka's UtilsTest.testMurmur2 (Java int results).
 	tests := []struct {
 		in   string
 		want int32

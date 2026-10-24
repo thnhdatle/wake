@@ -23,33 +23,22 @@ import (
 	"github.com/thnhdatle/wake/internal/config"
 )
 
-// client is the part of franz-go the sink uses; unit tests replace it.
 type client interface {
-	// Produce, Flush and Close are kgo.Client's.
 	Produce(ctx context.Context, r *kgo.Record, promise func(*kgo.Record, error))
 	Flush(ctx context.Context) error
 	Close()
-	// describeTopic reads the topic's partition count and
-	// max.message.bytes; exists is false for an unknown topic.
 	describeTopic(ctx context.Context, topic string) (topicInfo, error)
-	// createTopic creates the topic; -1 selects the broker default.
 	createTopic(ctx context.Context, topic string, partitions int32, replicationFactor int16) error
 }
 
-// topicInfo is what the sink knows about a topic.
 type topicInfo struct {
-	exists     bool
-	partitions int
-	// maxMessageBytes is the topic's effective max.message.bytes; 0 when
-	// the principal may not describe topic configs.
+	exists          bool
+	partitions      int
 	maxMessageBytes int64
 }
 
-// clientFactory builds a client from franz-go options.
 type clientFactory func(opts []kgo.Opt) (client, error)
 
-// kgoClient is the production client: one kgo.Client for producing and a
-// kadm.Client over it for metadata and topic creation.
 type kgoClient struct {
 	*kgo.Client
 	adm *kadm.Client
@@ -63,7 +52,6 @@ func newKgoClient(opts []kgo.Opt) (client, error) {
 	return &kgoClient{Client: cl, adm: kadm.NewClient(cl)}, nil
 }
 
-// Flush waits for every buffered record.
 func (c *kgoClient) Flush(ctx context.Context) error {
 	if err := c.Client.Flush(ctx); err != nil {
 		return fmt.Errorf("kafkasink: flush: %w", err)
@@ -92,8 +80,6 @@ func (c *kgoClient) describeTopic(ctx context.Context, topic string) (topicInfo,
 	return info, nil
 }
 
-// maxMessageBytes reads the topic's max.message.bytes; a principal without
-// DescribeConfigs permission yields 0 (unknown) instead of an error.
 func (c *kgoClient) maxMessageBytes(ctx context.Context, topic string) (int64, error) {
 	rc, err := c.topicConfig(ctx, topic)
 	if errors.Is(err, kerr.TopicAuthorizationFailed) || errors.Is(err, kerr.ClusterAuthorizationFailed) {
@@ -133,8 +119,6 @@ func (c *kgoClient) createTopic(ctx context.Context, topic string, partitions in
 	return nil
 }
 
-// connSettings are the connection options New reads from the config and
-// the environment.
 type connSettings struct {
 	brokers []string
 	tls     *tls.Config
@@ -171,8 +155,6 @@ func loadConnSettings(k *config.KafkaSink, getenv func(string) string) (connSett
 	return cs, nil
 }
 
-// loadTLS builds a client TLS configuration from PEM files: ca_file replaces
-// the system roots, cert_file and key_file present a client certificate.
 func loadTLS(c config.TLS) (*tls.Config, error) {
 	out := &tls.Config{MinVersion: tls.VersionTLS12}
 	if c.CAFile != "" {
@@ -196,10 +178,6 @@ func loadTLS(c config.TLS) (*tls.Config, error) {
 	return out, nil
 }
 
-// kgoOptions returns the franz-go options of the sink: idempotent
-// producer (the franz-go default, which keeps up to five produce requests in
-// flight per broker without reordering), acks=all, unlimited record retries,
-// no delivery timeout and Kafka-compatible key hashing.
 func (s *Sink) kgoOptions() []kgo.Opt {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(s.conn.brokers...),
@@ -224,10 +202,6 @@ func (s *Sink) kgoOptions() []kgo.Opt {
 	return opts
 }
 
-// batchMaxBytes caps franz-go batches per topic: max_bytes, raised so that
-// one event of max_event_bytes fits, and lowered to the topic's
-// max.message.bytes once known, so a batch of small records never trips the
-// broker limit.
 func (s *Sink) batchMaxBytes(topic string) int32 {
 	limit := max(s.maxBatchBytes, s.maxEventBytes+batchOverhead)
 	if topic != "" {
@@ -241,10 +215,8 @@ func (s *Sink) batchMaxBytes(topic string) int32 {
 	return int32(min(max(limit, minBatchBytes), maxBatchBytes)) //nolint:gosec // G115: clamped to int32 range
 }
 
-// brokerHook remembers the last connection error for the stall reason.
 type brokerHook struct{ s *Sink }
 
-// OnBrokerConnect implements kgo.HookBrokerConnect.
 func (h brokerHook) OnBrokerConnect(_ kgo.BrokerMetadata, _ time.Duration, _ net.Conn, err error) {
 	h.s.mu.Lock()
 	h.s.lastConnErr = err

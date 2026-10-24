@@ -143,8 +143,6 @@ func FuzzDecodeMessage(f *testing.F) {
 			return
 		}
 		if got := l2.EncodeMessage(ev); got != s {
-			// Decimal numbers may have leading zeros or a '+' in s; the
-			// re-encoded form must still decode to the same event.
 			again, err := l2.DecodeMessage(got)
 			if err != nil || again != ev {
 				t.Fatalf("%q -> %+v -> %q", s, ev, got)

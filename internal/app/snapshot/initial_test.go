@@ -30,8 +30,6 @@ type initialFixture struct {
 	initial *Initial
 }
 
-// newInitialFixture prepares run 4 over public.a (ids 1..5) and public.b
-// (ids 1..3) with chunk_rows 2 and the given number of sessions.
 func newInitialFixture(t *testing.T, sessions int) *initialFixture {
 	t.Helper()
 	f := &initialFixture{chunks: fakechunk.New(), opener: &fakeOpener{}, metrics: &recMetrics{}}
@@ -112,10 +110,6 @@ func TestNewInitial_Invalid(t *testing.T) {
 	}
 }
 
-// TestInitial_Run_EmitsReleasesAndPersistsAckedProgress: r events carry the
-// consistent point, the persisted clock_timestamp and n = c × chunk_rows + i;
-// the stream is released once every row is routed; progress is persisted
-// only for acknowledged chunks; Done follows the last acknowledgement.
 func TestInitial_Run_EmitsReleasesAndPersistsAckedProgress(t *testing.T) {
 	t.Parallel()
 	f := newInitialFixture(t, 1)
@@ -134,7 +128,6 @@ func TestInitial_Run_EmitsReleasesAndPersistsAckedProgress(t *testing.T) {
 		assert.Equal(t, uint64(3), r.SchemaVersion)
 		assert.NotContains(t, string(r.Payload), "tx_id")
 	}
-	// One session copies public.a in chunks 0..2 and public.b in 3..4.
 	assert.Equal(t, []string{
 		"0/5000-r4-0", "0/5000-r4-1", "0/5000-r4-2", "0/5000-r4-3", "0/5000-r4-4",
 		"0/5000-r4-6", "0/5000-r4-7", "0/5000-r4-8",
@@ -150,7 +143,7 @@ func TestInitial_Run_EmitsReleasesAndPersistsAckedProgress(t *testing.T) {
 
 	groups := pseudo.allGroups()
 	require.Len(t, groups, 5)
-	groups[1].ack() // out of order: chunk 1 before chunk 0
+	groups[1].ack()
 	groups[0].ack()
 	require.Eventually(t, func() bool {
 		return string(f.keeper.State().Snapshot.Runs[0].Tables[0].Position) == "[4]"

@@ -14,7 +14,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2"
 )
 
-// drain returns the events handle queued so far.
 func drain(b *bus) []l2.Event {
 	var got []l2.Event
 	for {
@@ -27,11 +26,6 @@ func drain(b *bus) []l2.Event {
 	}
 }
 
-// TestBusHandle_EventMapping drives handle with the replies go-redis
-// produces, without a connection: the first "subscribe" confirmation is
-// EventConnected, every later one (go-redis reconnected by itself) is a
-// disconnect followed by a connect; messages are decoded, foreign channels,
-// garbage, pongs and other subscription kinds are skipped.
 func TestBusHandle_EventMapping(t *testing.T) {
 	t.Parallel()
 	const ch = "wake:inval:ns"
@@ -70,7 +64,7 @@ func TestBusHandle_EventMapping(t *testing.T) {
 
 func TestBusHandle_StopsWhenContextEnds(t *testing.T) {
 	t.Parallel()
-	b := &bus{channel: "c", events: make(chan l2.Event)} // unbuffered, nobody receives
+	b := &bus{channel: "c", events: make(chan l2.Event)}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	confirmed := false

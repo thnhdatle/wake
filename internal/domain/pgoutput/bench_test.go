@@ -12,21 +12,16 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/schema"
 )
 
-// Relation OIDs of the benchmark shapes.
 const (
 	oidBenchNarrow uint32 = 30001
 	oidBenchWide   uint32 = 30002
 )
 
-// benchCase is one per-event hot-path input: a row message in wire form.
 type benchCase struct {
 	name string
 	wire []byte
 }
 
-// benchDecoder returns a decoder that knows the benchmark relations: the
-// throughput acceptance test row (bigint key, ~170-byte text payload) and a wide row of ten
-// columns of mixed types (numeric, timestamptz, jsonb, a TOASTable text).
 func benchDecoder(tb testing.TB) *pgoutput.Decoder {
 	tb.Helper()
 	dec := pgoutput.NewDecoder()
@@ -46,7 +41,6 @@ func benchDecoder(tb testing.TB) *pgoutput.Decoder {
 	return dec
 }
 
-// wideValues returns the wide row; doc is a TOAST marker when unchanged.
 func wideValues(unchanged bool) pgoutput.Tuple {
 	doc := txt(strings.Repeat("lorem ipsum ", 25))
 	if unchanged {
@@ -68,7 +62,6 @@ func benchCases() []benchCase {
 	}
 }
 
-// BenchmarkDecoder_Decode parses one row message from wire bytes.
 func BenchmarkDecoder_Decode(b *testing.B) {
 	for _, bc := range benchCases() {
 		b.Run(bc.name, func(b *testing.B) {
@@ -84,8 +77,6 @@ func BenchmarkDecoder_Decode(b *testing.B) {
 	}
 }
 
-// BenchmarkDecoder_RowImages converts one parsed row message to CDC event row
-// images (type mapping included).
 func BenchmarkDecoder_RowImages(b *testing.B) {
 	for _, bc := range benchCases() {
 		b.Run(bc.name, func(b *testing.B) {

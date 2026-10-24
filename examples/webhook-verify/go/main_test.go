@@ -25,7 +25,6 @@ func TestMain(m *testing.M) {
 
 const secret = "whsec_example"
 
-// fixture is a body signed by the sink's own signing function.
 type fixture struct {
 	dir, body, tampered, signature, old string
 }
@@ -98,9 +97,6 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// TestVerifiers_AgreeWithSink runs the Go, Python and Node verifiers on a
-// body signed by webhooksink.Sign: "valid" for it, "invalid" for a tampered
-// body and for an expired signature.
 func TestVerifiers_AgreeWithSink(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, time.Now())
@@ -129,8 +125,6 @@ func TestVerifiers_AgreeWithSink(t *testing.T) {
 	}
 }
 
-// script returns a verifier running an interpreter; it skips the test when
-// the interpreter is not installed.
 func script(interp string, args ...string) func(t *testing.T, sig, body string) (string, int) {
 	return func(t *testing.T, sig, body string) (string, int) {
 		t.Helper()

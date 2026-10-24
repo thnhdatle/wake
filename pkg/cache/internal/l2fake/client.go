@@ -11,14 +11,10 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2"
 )
 
-// ErrUnavailable is returned by every command while the server or the
-// client is down, like a connection error.
 var ErrUnavailable = errors.New("l2fake: connection refused")
 
-// Op names an l2 operation for hooks and call counts.
 type Op string
 
-// Operations of the l2 contract.
 const (
 	OpRead       Op = "read"
 	OpFill       Op = "fill"
@@ -30,21 +26,17 @@ const (
 	OpBumpEpoch  Op = "bump_epoch"
 )
 
-// Hooks run around every command, outside the server lock, on the caller's
-// goroutine. Before may block (to force an interleaving) or return an error
-// (injected failure or timeout); After runs once the command has executed.
 type Hooks struct {
 	Before func(ctx context.Context, op Op, key string) error
 	After  func(op Op, key string)
 }
 
-// Client is one cache instance's connection; it implements l2.Backend.
+// Client is one cache instance's connection to a Server.
 type Client struct {
 	srv *Server
 	cfg l2.Config
 	sub *subscription
 
-	// Guarded by srv.mu.
 	down    bool
 	busDown bool
 	closed  bool
@@ -54,7 +46,6 @@ type Client struct {
 
 var _ l2.Backend = (*Client)(nil)
 
-// SetDown makes this client unreachable (commands fail, bus disconnects).
 func (c *Client) SetDown(down bool) {
 	c.srv.mu.Lock()
 	defer c.srv.mu.Unlock()
@@ -62,7 +53,6 @@ func (c *Client) SetDown(down bool) {
 	c.srv.refreshLocked(c.sub)
 }
 
-// SetBusDown disconnects (true) or reconnects only the bus subscription.
 func (c *Client) SetBusDown(down bool) {
 	c.srv.mu.Lock()
 	defer c.srv.mu.Unlock()
@@ -70,31 +60,24 @@ func (c *Client) SetBusDown(down bool) {
 	c.srv.refreshLocked(c.sub)
 }
 
-// PauseBus holds queued events back from Receive until ResumeBus.
 func (c *Client) PauseBus() { c.sub.setPaused(true) }
 
-// ResumeBus releases events held by PauseBus.
 func (c *Client) ResumeBus() { c.sub.setPaused(false) }
 
-// WaitIdle blocks until this client's subscriber has handled every queued
-// event.
 func (c *Client) WaitIdle(ctx context.Context) error { return c.sub.waitIdle(ctx) }
 
-// SetHooks installs hooks for later commands.
 func (c *Client) SetHooks(h Hooks) {
 	c.srv.mu.Lock()
 	defer c.srv.mu.Unlock()
 	c.hooks = h
 }
 
-// Calls returns how many times op was attempted.
 func (c *Client) Calls(op Op) int {
 	c.srv.mu.Lock()
 	defer c.srv.mu.Unlock()
 	return c.calls[op]
 }
 
-// do runs one command: hooks, reachability, then fn under the server lock.
 func (c *Client) do(ctx context.Context, op Op, key string, fn func()) error {
 	c.srv.mu.Lock()
 	c.calls[op]++
@@ -113,9 +96,6 @@ func (c *Client) do(ctx context.Context, op Op, key string, fn func()) error {
 		c.srv.mu.Unlock()
 		return ErrUnavailable
 	}
-	// Redis runs one script at a time and each takes at least a
-	// microsecond, so TIME advances with every command; generations, which
-	// grow by one per script, therefore never overtake TIME.
 	c.srv.scriptMicros = c.srv.timeMicrosLocked()
 	fn()
 	c.srv.mu.Unlock()
@@ -125,7 +105,6 @@ func (c *Client) do(ctx context.Context, op Op, key string, fn func()) error {
 	return nil
 }
 
-// Read implements l2.Store.
 func (c *Client) Read(ctx context.Context, req l2.ReadRequest) (l2.ReadResult, error) {
 	var res l2.ReadResult
 	err := c.do(ctx, OpRead, req.Key, func() {
@@ -148,7 +127,6 @@ func (c *Client) Read(ctx context.Context, req l2.ReadRequest) (l2.ReadResult, e
 	return res, err
 }
 
-// Fill implements l2.Store.
 func (c *Client) Fill(ctx context.Context, req l2.FillRequest) (bool, error) {
 	var stored bool
 	err := c.do(ctx, OpFill, req.Key, func() {
@@ -172,7 +150,6 @@ func (c *Client) Fill(ctx context.Context, req l2.FillRequest) (bool, error) {
 	return stored, err
 }
 
-// Set implements l2.Store.
 func (c *Client) Set(ctx context.Context, req l2.SetRequest) (l2.WriteResult, error) {
 	var res l2.WriteResult
 	err := c.do(ctx, OpSet, req.Key, func() {
@@ -186,7 +163,6 @@ func (c *Client) Set(ctx context.Context, req l2.SetRequest) (l2.WriteResult, er
 	return res, err
 }
 
-// Invalidate implements l2.Store.
 func (c *Client) Invalidate(ctx context.Context, req l2.InvalidateRequest) (l2.WriteResult, error) {
 	var res l2.WriteResult
 	err := c.do(ctx, OpInvalidate, req.Key, func() {
@@ -206,7 +182,6 @@ func (c *Client) writeValueLocked(vkey string, gen uint64, payload []byte, ttl t
 	s.setLocked(vkey, string(l2.EncodeValue(l2.StoredValue{Gen: gen, ExpiresAtMS: exp, Payload: payload})), ttl)
 }
 
-// Lock implements l2.Locker.
 func (c *Client) Lock(ctx context.Context, epoch uint64, key, token string, ttl time.Duration) (bool, error) {
 	var ok bool
 	err := c.do(ctx, OpLock, key, func() {
@@ -220,7 +195,6 @@ func (c *Client) Lock(ctx context.Context, epoch uint64, key, token string, ttl 
 	return ok, err
 }
 
-// Unlock implements l2.Locker.
 func (c *Client) Unlock(ctx context.Context, epoch uint64, key, token string) error {
 	return c.do(ctx, OpUnlock, key, func() {
 		s := c.srv
@@ -232,14 +206,12 @@ func (c *Client) Unlock(ctx context.Context, epoch uint64, key, token string) er
 	})
 }
 
-// Epoch implements l2.EpochStore.
 func (c *Client) Epoch(ctx context.Context) (uint64, error) {
 	var e uint64
 	err := c.do(ctx, OpEpoch, "", func() { e = c.srv.epochLocked(c.cfg.Namespace) })
 	return e, err
 }
 
-// BumpEpoch implements l2.EpochStore.
 func (c *Client) BumpEpoch(ctx context.Context) (uint64, error) {
 	var e uint64
 	err := c.do(ctx, OpBumpEpoch, "", func() {
@@ -251,10 +223,8 @@ func (c *Client) BumpEpoch(ctx context.Context) (uint64, error) {
 	return e, err
 }
 
-// Receive implements l2.Bus.
 func (c *Client) Receive(ctx context.Context) (l2.Event, error) { return c.sub.receive(ctx) }
 
-// Close implements l2.Bus. It is idempotent.
 func (c *Client) Close() error {
 	c.srv.mu.Lock()
 	defer c.srv.mu.Unlock()

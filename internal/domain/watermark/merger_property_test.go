@@ -12,19 +12,8 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// foreignNonce is the nonce of a crashed earlier process whose watermarks
-// are still in the WAL.
 const foreignNonce = "01JAZ3X9Q8D7M6K5H4G3F2E1CZ"
 
-// TestMerger_High_ModelProperty is the model property of the merge: random
-// interleavings of a small table's writers (inserts, updates, deletes,
-// key-changing updates, commit records that become visible late, aborts),
-// a lagging stream and one table snapshot run, including retries. After the
-// run and a stream drain, the sink equals the database for every key (no
-// lost key); no r event is older than a stream event already emitted for its
-// key (no stale value) and none brings back a deleted or moved-away key (no
-// resurrection). Run longer with -rapid.checks=2000 (or more); rapid prints
-// the failing seed.
 func TestMerger_High_ModelProperty(t *testing.T) {
 	t.Parallel()
 	var total modelStats
@@ -38,7 +27,6 @@ func TestMerger_High_ModelProperty(t *testing.T) {
 		total.aboveXmax += stats.aboveXmax
 	})
 	t.Logf("model coverage: %+v", total)
-	// The model must exercise every path it exists for.
 	assert.Positive(t, total.chunks, "chunks emitted")
 	assert.Positive(t, total.retries, "retry path")
 	assert.Positive(t, total.droppedWindow, "window drops")
@@ -73,8 +61,6 @@ func runModel(t *rapid.T) modelStats {
 	return stats
 }
 
-// step performs one random action of the database, the stream reader or
-// the snapshotter.
 func step(t *rapid.T, db *modelDB, w *modelWake) {
 	switch action := rapid.IntRange(0, 99).Draw(t, "action"); {
 	case action < 18:
@@ -108,8 +94,6 @@ func step(t *rapid.T, db *modelDB, w *modelWake) {
 	}
 }
 
-// foreignWatermark writes a watermark left by a crashed process: same run
-// and chunk numbers, other nonce. The merger must never see it.
 func foreignWatermark(t *rapid.T, db *modelDB, w *modelWake) {
 	p := watermark.Payload{Nonce: foreignNonce, Run: modelRun, Table: modelTable, Chunk: w.chunk, Mark: watermark.MarkLow}
 	if rapid.Bool().Draw(t, "foreign_high") {
@@ -121,8 +105,6 @@ func foreignWatermark(t *rapid.T, db *modelDB, w *modelWake) {
 	db.commitMessage(db.begin(true), b)
 }
 
-// drain ends every open transaction, then runs the snapshot to its end and
-// reads the whole WAL.
 func drain(t *rapid.T, db *modelDB, w *modelWake) {
 	for tx := db.pick(t, txRunning); tx != nil; tx = db.pick(t, txRunning) {
 		if rapid.Bool().Draw(t, "drain_commit") {

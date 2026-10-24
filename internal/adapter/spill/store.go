@@ -14,25 +14,22 @@ import (
 )
 
 const (
-	// Extension is the suffix of every spill file.
 	Extension = ".spill"
 
 	dirMode = 0o700
 )
 
-// Store keeps spill files in one directory. It is safe for concurrent use;
-// every file is independent.
+// Store keeps spill files in one directory.
 type Store struct {
 	dir string
 
-	mu   sync.Mutex // protects open
+	mu   sync.Mutex
 	open map[*File]struct{}
 }
 
 var _ pipeline.SpillStore = (*Store)(nil)
 
-// New returns a store for dir. It touches no file; Create and RemoveAll
-// create the directory.
+// New returns a Store for dir.
 func New(dir string) (*Store, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("%w: empty spill dir", ErrInvalidDir)
@@ -40,11 +37,9 @@ func New(dir string) (*Store, error) {
 	return &Store{dir: filepath.Clean(dir), open: map[*File]struct{}{}}, nil
 }
 
-// Dir returns the spill directory.
 func (s *Store) Dir() string { return s.dir }
 
-// Create makes `<dir>/<name>.spill`, truncating a file of the same name. The
-// name must not be empty, "." or "..", nor contain a path separator.
+// Create creates a new spill file.
 func (s *Store) Create(ctx context.Context, name string) (pipeline.SpillFile, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("create spill file: %w", err)
@@ -74,7 +69,6 @@ func (s *Store) forget(f *File) {
 	s.mu.Unlock()
 }
 
-// invalidateOpen marks every open file removed, as RemoveAll deletes them.
 func (s *Store) invalidateOpen() {
 	s.mu.Lock()
 	files := make([]*File, 0, len(s.open))
@@ -88,9 +82,6 @@ func (s *Store) invalidateOpen() {
 	}
 }
 
-// RemoveAll deletes every *.spill file of the directory and creates the
-// directory if it is missing. Other files and subdirectories stay. Files
-// still open through Create are closed and later report ErrRemoved.
 func (s *Store) RemoveAll(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("remove spill files: %w", err)

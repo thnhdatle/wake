@@ -14,21 +14,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/watermark"
 )
 
-// This file models Postgres closely enough to check the chunk/stream merge:
-//
-//   - every transaction gets a full xid (xid8, epoch-extended, special low
-//     values skipped) when it begins; pgoutput only shows its low 32 bits;
-//   - a data transaction writes its rows and its commit record atomically
-//     (the WAL record and clog), but stays in the proc array, invisible to
-//     new snapshots, until a separate step ("committed in WAL, not yet
-//     visible"); row locks are held until then, so writers of one key are
-//     serialized by visibility as in Postgres;
-//   - a snapshot has xmax = latestCompletedXid + 1 and xip = proc array xids
-//     below xmax, so a transaction can be invisible without being listed;
-//   - LOW and HIGH are transactions of their own; LOW's xid is assigned
-//     before other transactions can commit ahead of it;
-//   - the stream reads the WAL in commit order and may lag arbitrarily.
-
 const (
 	modelKeys      = 10
 	modelChunkRows = 2
@@ -53,14 +38,14 @@ type modelTx struct {
 }
 
 type modelWrite struct {
-	xid     uint64 // 0: written before the simulation, visible to all
+	xid     uint64
 	version uint64
 	present bool
 }
 
 type modelChange struct {
 	key     int
-	before  int // key moved away from, -1 unless a key-changing update
+	before  int
 	present bool
 	version uint64
 }
@@ -82,7 +67,6 @@ type modelDB struct {
 	wal             []walRecord
 }
 
-// advanceXID mirrors FullTransactionIdAdvance: low halves 0..2 are special.
 func advanceXID(x uint64) uint64 {
 	x++
 	if uint32(x) < 3 {
@@ -116,8 +100,6 @@ func (db *modelDB) begin(wake bool) *modelTx {
 	return tx
 }
 
-// pick returns a random proc array transaction of Wake's workload in the
-// given state, or nil.
 func (db *modelDB) pick(t *rapid.T, state txState) *modelTx {
 	var xs []uint64
 	for _, x := range slices.Sorted(maps.Keys(db.procs)) {
@@ -152,8 +134,6 @@ func (db *modelDB) write(tx *modelTx, k int, present bool) uint64 {
 	return db.version
 }
 
-// commitData draws the transaction's row changes, applies them and writes
-// its commit record; the transaction stays invisible until complete.
 func (db *modelDB) commitData(t *rapid.T, tx *modelTx) {
 	var changes []modelChange
 	for range rapid.IntRange(0, 3).Draw(t, "ops") {
@@ -186,16 +166,12 @@ func (db *modelDB) applyOp(t *rapid.T, tx *modelTx, k, kind int) modelChange {
 	return modelChange{key: k, before: -1, present: true, version: db.write(tx, k, true)}
 }
 
-// commitMessage writes a watermark transaction, which Wake's emitter only
-// returns from once it is visible.
 func (db *modelDB) commitMessage(tx *modelTx, payload []byte) {
 	db.wal = append(db.wal, walRecord{xid: tx.xid, message: payload})
 	db.committed[tx.xid] = true
 	db.complete(tx)
 }
 
-// complete removes the transaction from the proc array (visibility for a
-// committed one, end of an aborted one) and releases its row locks.
 func (db *modelDB) complete(tx *modelTx) {
 	delete(db.procs, tx.xid)
 	db.latestCompleted = max(db.latestCompleted, tx.xid)
@@ -204,7 +180,6 @@ func (db *modelDB) complete(tx *modelTx) {
 	}
 }
 
-// snapshot takes pg_current_snapshot() and the row state it sees.
 func (db *modelDB) snapshot(t *rapid.T) (watermark.Snapshot, [modelKeys]modelWrite) {
 	snap := watermark.Snapshot{Xmax: advanceXID(db.latestCompleted)}
 	snap.Xmin = snap.Xmax
@@ -234,7 +209,6 @@ func (db *modelDB) snapshot(t *rapid.T) (watermark.Snapshot, [modelKeys]modelWri
 	return snap, seen
 }
 
-// keyBytes returns the canonical key of model key k.
 func keyBytes(k int) []byte {
 	return change.AppendCanonicalKey(nil, change.Row{{Name: "id", Value: strconv.AppendInt(nil, int64(k), 10)}})
 }

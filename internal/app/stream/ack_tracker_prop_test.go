@@ -16,8 +16,6 @@ import (
 	"github.com/thnhdatle/wake/internal/testutil/fakesink"
 )
 
-// ackModel mirrors the tracker: transactions in registration order with
-// their pending deliveries, seal state and open group.
 type ackModel struct {
 	t       *rapid.T
 	tracker *AckTracker
@@ -26,8 +24,8 @@ type ackModel struct {
 	start   lsn.LSN
 	lastEnd lsn.LSN
 	txs     []*modelTx
-	byID    map[change.ID]int // record id -> index in txs
-	nextN   uint64            // snapshot row counter (unique r ids)
+	byID    map[change.ID]int
+	nextN   uint64
 	prev    lsn.LSN
 }
 
@@ -52,7 +50,6 @@ func newAckModel(t *rapid.T) *ackModel {
 	sinks := make([]*fakesink.Sink, nSinks)
 	for i := range nSinks {
 		sinks[i] = fakesink.New("s" + strconv.Itoa(i))
-		// Each sink receives a random subset of tables t0..t3 (possibly none).
 		var tables []string
 		for tb := range 4 {
 			if rapid.Bool().Draw(t, "route") {
@@ -87,8 +84,6 @@ func (m *ackModel) begin(pseudo bool) *modelTx {
 	return tx
 }
 
-// route sends one event of tx (attached rows go to the open group, if any)
-// and records the number of deliveries.
 func (m *ackModel) route(i int, attached bool) {
 	tx := m.txs[i]
 	ev := change.Event{Source: m.table(), Op: change.OpCreate, Key: change.Row{{Name: "id", Value: []byte("1")}}}
@@ -98,8 +93,6 @@ func (m *ackModel) route(i int, attached bool) {
 	)
 	switch {
 	case attached:
-		// Attached rows carry snapshot ids, unique across transactions even
-		// when the pseudo-transaction and a stream transaction share an LSN.
 		m.nextN++
 		ev.ID, ev.Op = change.SnapshotID(tx.commit, 1, m.nextN), change.OpRead
 	default:
@@ -131,7 +124,6 @@ func (m *ackModel) stepStreamTx() {
 	for range rapid.IntRange(0, 3).Draw(m.t, "records") {
 		m.route(len(m.txs)-1, false)
 	}
-	// Most transactions are sealed at Commit; some stay open (HIGH).
 	if rapid.IntRange(0, 3).Draw(m.t, "keep_open") > 0 {
 		require.NoError(m.t, m.tracker.Seal(tx.handle))
 		tx.sealed = true
@@ -183,8 +175,6 @@ func (m *ackModel) stepAck() {
 	m.txs[m.byID[pending[i].ID]].pending--
 }
 
-// check asserts that the confirmed LSN never passes an unacknowledged
-// transaction, and the tracker's observable state.
 func (m *ackModel) check() {
 	c := m.tracker.Confirmed()
 	require.GreaterOrEqual(m.t, c, m.prev, "confirmed LSN is monotonic")
@@ -212,7 +202,6 @@ func (m *ackModel) check() {
 	}
 }
 
-// drain seals everything and acknowledges every delivery in random order.
 func (m *ackModel) drain() {
 	for _, tx := range m.txs {
 		if tx.groupOpen {
@@ -244,14 +233,6 @@ func (m *ackModel) drain() {
 	}
 }
 
-// TestAckTracker_Property_ConfirmedLSNSafety is the safety property of the
-// confirmed LSN: for any
-// interleaving of acknowledgements from N sinks, unrouted transactions, the
-// initial-snapshot pseudo-transaction and HIGH attachments, the confirmed
-// LSN never exceeds the commit LSN of the oldest transaction not fully
-// acknowledged, is monotonic, always equals the end LSN of the contiguous
-// acknowledged prefix, and reaches the last end LSN once everything is
-// acknowledged.
 func TestAckTracker_Property_ConfirmedLSNSafety(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {

@@ -10,16 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// querier is the query side shared by *pgx.Conn and pgx.Tx.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// candidatesSQL lists the tables managed mode may publish: permanent plain
-// and partitioned tables that are not partitions (partitions are captured
-// through their root, publish_via_partition_root), outside the system
-// schemas and not owned by an extension.
 const candidatesSQL = `SELECT ` + tableColumnsSQL + `
 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN ('r', 'p') AND NOT c.relispartition AND c.relpersistence = 'p'
@@ -28,7 +23,6 @@ WHERE c.relkind IN ('r', 'p') AND NOT c.relispartition AND c.relpersistence = 'p
 		WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e')
 ORDER BY n.nspname, c.relname`
 
-// candidateTables lists the tables managed mode may publish.
 func candidateTables(ctx context.Context, q querier) ([]Table, error) {
 	rows, err := q.Query(ctx, candidatesSQL)
 	if err != nil {
@@ -37,8 +31,6 @@ func candidateTables(ctx context.Context, q querier) ([]Table, error) {
 	return scanTables(rows)
 }
 
-// pubState is a publication's row of pg_publication and its directly
-// listed tables.
 type pubState struct {
 	name                             string
 	exists, owned, allTables         bool
@@ -47,9 +39,6 @@ type pubState struct {
 	members                          []Table
 }
 
-// hasOptions reports whether the publication publishes exactly the
-// operations of publish (publishAll or publishInsert) via the partition
-// root.
 func (ps *pubState) hasOptions(publish string) bool {
 	if publish == publishInsert {
 		return ps.insert && !ps.update && !ps.delete && !ps.truncate && ps.viaRoot
@@ -67,7 +56,6 @@ JOIN pg_catalog.pg_class c ON c.oid = pr.prrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE pr.prpubid = $1 ORDER BY n.nspname, c.relname`
 
-// loadPubState reads a publication; exists is false when there is none.
 func loadPubState(ctx context.Context, q querier, name string) (pubState, error) {
 	ps := pubState{name: name}
 	var oid uint32
@@ -90,25 +78,16 @@ func loadPubState(ctx context.Context, q querier, name string) (pubState, error)
 	return ps, nil
 }
 
-// ExistingPublication describes the publication of existing mode
-// (source.publication.name), which Wake never alters.
 type ExistingPublication struct {
-	Name   string
-	Exists bool
-	// Owned reports whether the current role owns it.
-	Owned     bool
-	AllTables bool
-	// Insert, Update, Delete and Truncate are the published operations.
+	Name                             string
+	Exists                           bool
+	Owned                            bool
+	AllTables                        bool
 	Insert, Update, Delete, Truncate bool
-	// ViaRoot is publish_via_partition_root.
-	ViaRoot bool
-	// Tables are the published tables as Postgres publishes them: leaf
-	// partitions instead of their root when ViaRoot is false.
-	Tables []Table
+	ViaRoot                          bool
+	Tables                           []Table
 }
 
-// PartitionLeaves returns the published partitions when ViaRoot is false:
-// their events carry the leaf names (startup logs a warning).
 func (e *ExistingPublication) PartitionLeaves() []Table {
 	if e.ViaRoot {
 		return nil
@@ -122,7 +101,6 @@ func (e *ExistingPublication) PartitionLeaves() []Table {
 	return out
 }
 
-// Keyless returns the published tables without key.
 func (e *ExistingPublication) Keyless() []Table {
 	var out []Table
 	for _, t := range e.Tables {
@@ -133,8 +111,6 @@ func (e *ExistingPublication) Keyless() []Table {
 	return out
 }
 
-// InspectExisting reads the existing-mode publication; Exists is false when
-// there is none.
 func (p *Publications) InspectExisting(ctx context.Context, name string) (ExistingPublication, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.o.queryTimeout)
 	defer cancel()

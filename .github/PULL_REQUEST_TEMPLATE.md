@@ -12,7 +12,7 @@
 
 ## Checklist
 
-- [ ] Tests added or updated (unit; integration or acceptance where relevant)
+- [ ] Tests added or updated (unit; integration where relevant)
 - [ ] `make lint test` passes locally
 - [ ] Documentation updated (README, guides, config reference)
 - [ ] `CHANGELOG.md` updated under Unreleased

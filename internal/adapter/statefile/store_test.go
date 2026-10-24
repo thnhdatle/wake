@@ -148,7 +148,7 @@ func TestStore_Load_Invalid(t *testing.T) {
 func TestStore_Load_ReadError(t *testing.T) {
 	t.Parallel()
 	st, path := newStore(t)
-	require.NoError(t, os.MkdirAll(path, 0o700)) // a directory where the file should be
+	require.NoError(t, os.MkdirAll(path, 0o700))
 	_, err := st.Load(context.Background())
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, pipeline.ErrStateNotFound)

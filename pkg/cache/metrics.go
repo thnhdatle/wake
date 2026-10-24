@@ -9,15 +9,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Breaker states exported by wake_cache_breaker_state.
 const (
 	breakerClosed int32 = iota
 	breakerOpen
 	breakerHalfOpen
 )
 
-// metrics holds counters pre-bound to the namespace label, so recording a
-// hit does not allocate.
 type metrics struct {
 	l1Hits, l1Misses, l2Hits, l2Misses prometheus.Counter
 	loads, lockWaits, fallbackLoads    prometheus.Counter
@@ -35,8 +32,6 @@ func gaugeVec(name, help string) *prometheus.GaugeVec {
 	return prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: name, Help: help}, []string{"namespace"})
 }
 
-// register registers c on reg, reusing an identical collector registered by
-// another cache. A nil reg leaves c unregistered (metrics disabled).
 func register[C prometheus.Collector](reg prometheus.Registerer, c C) (C, error) {
 	if reg == nil {
 		return c, nil

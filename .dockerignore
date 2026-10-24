@@ -5,8 +5,6 @@
 bin/
 dist/
 docs/
-acceptance/
-bench/
 examples/
 scripts/
 coverage*.out

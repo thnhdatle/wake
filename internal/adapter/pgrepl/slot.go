@@ -16,9 +16,7 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// IdentifySystem implements pipeline.SlotManager. It opens the replication
-// connection if needed; its failure is the replication privilege check
-// (code replication_privilege).
+// IdentifySystem returns the identity of the server.
 func (c *Conn) IdentifySystem(ctx context.Context) (pipeline.SystemInfo, error) {
 	conn, err := c.command(ctx)
 	if err != nil {
@@ -39,10 +37,7 @@ func (c *Conn) IdentifySystem(ctx context.Context) (pipeline.SystemInfo, error) 
 	}, nil
 }
 
-// CreateSlot implements pipeline.SlotManager: CREATE_REPLICATION_SLOT
-// <name> LOGICAL pgoutput EXPORT_SNAPSHOT. The exported snapshot stays
-// importable until this connection runs its next command, which must be
-// StartReplication (see the package documentation).
+// CreateSlot creates a logical replication slot.
 func (c *Conn) CreateSlot(ctx context.Context, name string) (pipeline.SlotInfo, error) {
 	if err := ValidateSlotName(name); err != nil {
 		return pipeline.SlotInfo{}, err
@@ -73,9 +68,9 @@ func (c *Conn) mapCreateError(slot string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case "42710": // duplicate_object
+		case "42710":
 			return fmt.Errorf("%w: %s: %w", ErrSlotExists, slot, err)
-		case "53400": // configuration_limit_exceeded
+		case "53400":
 			return noFreeSlotError(slot, err)
 		case "42501":
 			return privilegeError(c.cfg.User, err)
@@ -84,8 +79,7 @@ func (c *Conn) mapCreateError(slot string, err error) error {
 	return fmt.Errorf("pgrepl: create slot %s: %w", slot, err)
 }
 
-// DropSlot implements pipeline.SlotManager: DROP_REPLICATION_SLOT without
-// WAIT. An absent slot is not an error; an active one is slot_in_use.
+// DropSlot drops a replication slot.
 func (c *Conn) DropSlot(ctx context.Context, name string) error {
 	if err := ValidateSlotName(name); err != nil {
 		return err
@@ -105,9 +99,9 @@ func (c *Conn) DropSlot(ctx context.Context, name string) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case "42704": // undefined_object
+		case "42704":
 			return nil
-		case "55006": // object_in_use
+		case "55006":
 			st, _ := lookupSlot(ctx, conn, name) //nolint:errcheck // the PID is best effort
 			return slotInUseError(name, st.activePID, err)
 		}
@@ -115,15 +109,12 @@ func (c *Conn) DropSlot(ctx context.Context, name string) error {
 	return fmt.Errorf("pgrepl: drop slot %s: %w", name, err)
 }
 
-// slotRow is the part of a pg_replication_slots row used to explain errors.
 type slotRow struct {
 	found     bool
 	activePID int32
 	walStatus string
 }
 
-// lookupSlot reads the slot's row over the replication connection, which
-// accepts simple-protocol SQL (replication=database). name is validated.
 func lookupSlot(ctx context.Context, conn *pgconn.PgConn, name string) (slotRow, error) {
 	if err := ValidateSlotName(name); err != nil {
 		return slotRow{}, err

@@ -48,7 +48,6 @@ func ExampleMapping_Keys() {
 	if err != nil {
 		panic(err)
 	}
-	// An update that changed the e-mail address (REPLICA IDENTITY FULL).
 	e, err := event.Decode([]byte(`{"id":"0/16B3800-0","source":{"db":"app","schema":"public","table":"users"},
 		"op":"u","ts_ms":1760600001000,"lsn":"0/16B3800","tx_id":7813,"key":{"id":9223372036854775807},
 		"before":{"id":9223372036854775807,"email":"a@example.com"},
@@ -72,14 +71,13 @@ func ExampleMapping_CheckReplicaIdentity() {
 	}
 	err = m.CheckReplicaIdentity([]cdcsource.TableInfo{{
 		Schema: "public", Table: "users",
-		Columns: []string{"id", "email"}, IdentityColumns: []string{"id"}, // default identity
+		Columns: []string{"id", "email"}, IdentityColumns: []string{"id"},
 	}})
 	fmt.Println(errors.Is(err, cdcsource.ErrRequiresFullIdentity))
 	// Output:
 	// true
 }
 
-// sliceSource delivers one batch, then waits for the end of ctx.
 type sliceSource [][]byte
 
 func (s sliceSource) Consume(ctx context.Context, handle cdcsource.Handler) error {
@@ -91,7 +89,7 @@ func (s sliceSource) Consume(ctx context.Context, handle cdcsource.Handler) erro
 }
 
 func ExampleNew() {
-	users, err := cache.New[string]("users", cache.JSONCodec[string]()) // add cache.WithL2 in production
+	users, err := cache.New[string]("users", cache.JSONCodec[string]())
 	if err != nil {
 		panic(err)
 	}

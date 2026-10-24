@@ -14,8 +14,6 @@ import (
 	"github.com/thnhdatle/wake/internal/domain/pipeline"
 )
 
-// ackSink acknowledges every record on Send and keeps nothing, so a
-// benchmark measures the reader and router, not the sink.
 type ackSink struct{}
 
 func (ackSink) Name() string                                      { return "ack" }
@@ -23,10 +21,6 @@ func (ackSink) Health() pipeline.SinkHealth                       { return pipel
 func (ackSink) Run(ctx context.Context) error                     { <-ctx.Done(); return nil }
 func (ackSink) Send(_ context.Context, rec pipeline.Record) error { return rec.Ack.Ack() }
 
-// BenchmarkReader_Tx streams one single-row INSERT transaction (Begin,
-// Insert, Commit; the throughput acceptance test shape: integer key, ~170-byte text payload)
-// through decoding, event encoding, buffering, dispatch, routing and the
-// ack tracker; the sink acknowledges on Send.
 func BenchmarkReader_Tx(b *testing.B) {
 	f := newFixture(b, fixtureOpts{route: ackSink{}})
 	ctx := context.Background()

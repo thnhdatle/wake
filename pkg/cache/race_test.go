@@ -14,8 +14,6 @@ import (
 	"github.com/thnhdatle/wake/pkg/cache/internal/l2fake"
 )
 
-// afterOnce runs fn once, right after the first op executed on cli; fn
-// may itself run op on cli.
 func afterOnce(cli *l2fake.Client, op l2fake.Op, fn func()) {
 	var fired atomic.Bool
 	cli.SetHooks(l2fake.Hooks{After: func(o l2fake.Op, _ string) {
@@ -25,10 +23,6 @@ func afterOnce(cli *l2fake.Client, op l2fake.Op, fn func()) {
 	}})
 }
 
-// Race "L1 populate after invalidation" (cache-consistency.md): a reader
-// captures its L1 token, reads the old value from L2, an invalidation is
-// processed by its instance, and only then the reader inserts into L1. The
-// insert must be refused.
 func TestCache_L1Guard_PopulateAfterInvalidation(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -54,9 +48,8 @@ func TestCache_L1Guard_PopulateAfterInvalidation(t *testing.T) {
 			reader.l1.Flush()
 
 			afterOnce(reader.cli, l2fake.OpRead, func() {
-				// The reader has read value 1 from L2 but not inserted it.
 				require.NoError(t, writer.Delete(ctx, "k"))
-				require.NoError(t, reader.cli.WaitIdle(ctx)) // reader's subscriber processed it
+				require.NoError(t, reader.cli.WaitIdle(ctx))
 			})
 			v, err := tc.read(reader, ctx)
 			require.NoError(t, err)
@@ -70,9 +63,6 @@ func TestCache_L1Guard_PopulateAfterInvalidation(t *testing.T) {
 	}
 }
 
-// Race "load vs Delete": the loader read the old row, then the row changes
-// and Delete increments the generation before the loader's write. The
-// generation-checked write is rejected and nothing is cached.
 func TestCache_LoadVsDelete_WriteRejected(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -94,8 +84,8 @@ func TestCache_LoadVsDelete_WriteRejected(t *testing.T) {
 			ctx := t.Context()
 			db := 1
 			load := func(context.Context) (int, error) {
-				v := db // read the row (old value)
-				db = 2  // a writer commits ...
+				v := db
+				db = 2
 				require.NoError(t, deleter.Delete(ctx, "k"))
 				return v, nil
 			}
@@ -116,9 +106,6 @@ func TestCache_LoadVsDelete_WriteRejected(t *testing.T) {
 	}
 }
 
-// Race "generation expiry": a loader captured generation g; the generation
-// key expires (no script touched it for longer than its TTL) and is
-// re-created from TIME. The loader's write under g must be rejected.
 func TestCache_GenerationExpiry_StaleWriteRejected(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -127,10 +114,10 @@ func TestCache_GenerationExpiry_StaleWriteRejected(t *testing.T) {
 	var captured uint64
 	load := func(context.Context) (int, error) {
 		captured, _ = e.srv.Gen(testNS, a.epoch.Load(), "k")
-		e.clk.Advance(time.Minute + time.Second + genGrace) // generation TTL elapses
+		e.clk.Advance(time.Minute + time.Second + genGrace)
 		_, ok := e.srv.Gen(testNS, a.epoch.Load(), "k")
 		assert.False(t, ok, "generation key expired")
-		_, _, err := b.Get(ctx, "k") // re-creates it from TIME
+		_, _, err := b.Get(ctx, "k")
 		assert.NoError(t, err)
 		return 1, nil
 	}
@@ -143,8 +130,6 @@ func TestCache_GenerationExpiry_StaleWriteRejected(t *testing.T) {
 	assert.False(t, stored)
 }
 
-// Race "epoch change": incrementing the epoch makes every older L2 entry
-// invisible and flushes every instance's L1.
 func TestCache_EpochChange_InvalidatesNamespace(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -174,9 +159,6 @@ func TestCache_EpochChange_InvalidatesNamespace(t *testing.T) {
 	assert.True(t, stillThere, "old keys are left to expire")
 }
 
-// An instance that has not yet seen an epoch change (bus lagging) still
-// invalidates the live keyspace: the server reports the epoch with every
-// write and the write is repeated there.
 func TestCache_Delete_StaleEpochRepeatsAtCurrentEpoch(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
@@ -203,17 +185,12 @@ func TestCache_Delete_StaleEpochRepeatsAtCurrentEpoch(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// Concurrent Sets of one key on one instance: whatever order the local L1
-// updates run in, L1 ends with the value of the highest generation, the
-// one L2 holds.
 func TestCache_Set_ConcurrentLocalSetsKeepNewest(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	a := e.instance()
 	ctx := t.Context()
 	afterOnce(a.cli, l2fake.OpSet, func() {
-		// First Set wrote L2 (generation g); a second Set completes
-		// entirely (g+1, L1 updated) before the first updates L1.
 		require.NoError(t, a.Set(ctx, "k", 2))
 	})
 	require.NoError(t, a.Set(ctx, "k", 1))
@@ -228,7 +205,6 @@ func TestCache_Set_ConcurrentLocalSetsKeepNewest(t *testing.T) {
 	assert.Equal(t, []byte{0, '2'}, sv.Payload)
 }
 
-// Set on one instance replaces the value on every instance.
 func TestCache_Set_InvalidatesOtherInstances(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)

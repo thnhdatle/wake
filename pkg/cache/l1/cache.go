@@ -17,26 +17,21 @@ const (
 
 // Entry is what Set and SetIfUnchanged store.
 type Entry[V any] struct {
-	// Value is stored and returned by value (shared, treat as immutable).
 	Value V
-	// Size is the accounted size in bytes (the caller's encoded size).
-	Size int
-	// TTL is the lifetime; zero or negative never expires.
+	Size  int
+	// TTL is the entry lifetime. Zero or negative means no expiry.
 	TTL time.Duration
-	// Version orders writes of the same key: an entry is never replaced by
-	// one with a lower version, and Invalidate keeps an entry whose version
-	// is at least the invalidated one.
+	// Version orders writes of the same key.
 	Version uint64
 }
 
-// Token is a captured shard invalidation counter (see Cache.Token).
+// Token is a captured shard invalidation counter.
 type Token struct {
 	shard uint32
 	n     uint64
 }
 
-// Cache is a sharded LRU bounded by entries and bytes. It is safe for
-// concurrent use.
+// Cache is a sharded LRU bounded by entries and bytes.
 type Cache[V any] struct {
 	shards []shard[V]
 	mask   uint64
@@ -45,8 +40,7 @@ type Cache[V any] struct {
 	jitter time.Duration
 }
 
-// New returns a cache holding at most maxEntries entries and maxBytes
-// accounted bytes; each shard holds an equal share of both bounds.
+// New returns a cache bounded by maxEntries entries and maxBytes bytes.
 func New[V any](maxEntries int, maxBytes int64, opts ...Option) (*Cache[V], error) {
 	if maxEntries <= 0 || maxBytes <= 0 {
 		return nil, fmt.Errorf("bounds %d entries, %d bytes: %w", maxEntries, maxBytes, ErrInvalidConfig)
@@ -64,7 +58,7 @@ func New[V any](maxEntries int, maxBytes int64, opts ...Option) (*Cache[V], erro
 			n /= 2
 		}
 	}
-	n = 1 << bits.Len(uint(n-1)) // round up to a power of two
+	n = 1 << bits.Len(uint(n-1))
 	c := &Cache[V]{
 		shards: make([]shard[V], n),
 		mask:   uint64(n - 1), //nolint:gosec // G115: n is a positive power of two
@@ -85,14 +79,10 @@ func (c *Cache[V]) index(key string) uint32 {
 	return uint32(maphash.String(c.seed, key) & c.mask) //nolint:gosec // G115: masked to the shard count
 }
 
-// Seq returns the captured counter. Two tokens of the same key are equal
-// exactly when no invalidation touched its shard between their captures, so
-// callers can use it to tell work started before an invalidation from work
-// started after it.
+// Seq returns the captured counter.
 func (t Token) Seq() uint64 { return t.n }
 
-// Token captures the invalidation counter of key's shard. Capture it before
-// reading the lower tier and pass it to SetIfUnchanged.
+// Token captures the invalidation counter of key's shard.
 func (c *Cache[V]) Token(key string) Token {
 	i := c.index(key)
 	return Token{shard: i, n: c.shards[i].inval.Load()}
@@ -103,8 +93,7 @@ func (c *Cache[V]) Get(key string) (V, bool) {
 	return c.get(key, 0)
 }
 
-// GetMaxAge is Get that also treats entries stored more than maxAge ago as
-// expired (a positive maxAge caps the TTL of existing entries).
+// GetMaxAge is Get that also treats entries older than maxAge as expired.
 func (c *Cache[V]) GetMaxAge(key string, maxAge time.Duration) (V, bool) {
 	return c.get(key, maxAge)
 }
@@ -124,9 +113,7 @@ func (c *Cache[V]) get(key string, maxAge time.Duration) (V, bool) {
 	return v, true
 }
 
-// GetStale returns the value of key if present and expired for less than
-// maxStale (or not expired at all). Invalidated entries are gone and never
-// returned.
+// GetStale returns the value of key if present and expired for less than maxStale.
 func (c *Cache[V]) GetStale(key string, maxStale time.Duration) (V, bool) {
 	s := &c.shards[c.index(key)]
 	now := c.clock.Now().UnixNano()
@@ -140,9 +127,7 @@ func (c *Cache[V]) GetStale(key string, maxStale time.Duration) (V, bool) {
 	return n.value, true
 }
 
-// Set counts an invalidation of key's shard and stores e, unless an entry
-// with a higher version exists or e does not fit in the shard. It reports
-// whether e was stored.
+// Set stores e and counts an invalidation of key's shard.
 func (c *Cache[V]) Set(key string, e Entry[V]) bool {
 	s := &c.shards[c.index(key)]
 	s.mu.Lock()
@@ -151,9 +136,7 @@ func (c *Cache[V]) Set(key string, e Entry[V]) bool {
 	return s.insertLocked(c.newNodeLocked(s, key, e))
 }
 
-// SetIfUnchanged stores e only if no invalidation touched key's shard since
-// tok was captured (and under the same rules as Set, without counting an
-// invalidation). It reports whether e was stored.
+// SetIfUnchanged stores e only if no invalidation touched key's shard since tok was captured.
 func (c *Cache[V]) SetIfUnchanged(tok Token, key string, e Entry[V]) bool {
 	i := c.index(key)
 	s := &c.shards[i]
@@ -180,8 +163,7 @@ func (c *Cache[V]) newNodeLocked(s *shard[V], key string, e Entry[V]) *node[V] {
 	return n
 }
 
-// Invalidate counts an invalidation of key's shard and removes key unless
-// its entry has a version of at least version.
+// Invalidate removes key unless its entry has a version of at least version.
 func (c *Cache[V]) Invalidate(key string, version uint64) {
 	s := &c.shards[c.index(key)]
 	s.mu.Lock()
@@ -192,7 +174,7 @@ func (c *Cache[V]) Invalidate(key string, version uint64) {
 	}
 }
 
-// Delete counts an invalidation of key's shard and removes key.
+// Delete removes key and counts an invalidation of its shard.
 func (c *Cache[V]) Delete(key string) {
 	s := &c.shards[c.index(key)]
 	s.mu.Lock()
@@ -203,7 +185,7 @@ func (c *Cache[V]) Delete(key string) {
 	}
 }
 
-// Flush counts an invalidation of every shard and removes every entry.
+// Flush removes every entry.
 func (c *Cache[V]) Flush() {
 	for i := range c.shards {
 		s := &c.shards[i]
@@ -214,7 +196,7 @@ func (c *Cache[V]) Flush() {
 	}
 }
 
-// Len returns the number of stored entries, expired ones included.
+// Len returns the number of stored entries.
 func (c *Cache[V]) Len() int {
 	total := 0
 	for i := range c.shards {
