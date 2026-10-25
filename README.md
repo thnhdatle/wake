@@ -80,9 +80,9 @@ and its cache library stays correct when data changes outside your application.
 ## Install
 
 ```sh
-docker run --rm ghcr.io/thnhdatle/wake:v0.1.0 version         # service in Docker
-go install github.com/thnhdatle/wake/cmd/wake@v0.1.0          # service binary
-go get github.com/thnhdatle/wake@v0.1.0                        # cache library and event types
+docker run --rm ghcr.io/thnhdatle/wake:v0.1.1 version         # service in Docker
+go install github.com/thnhdatle/wake/cmd/wake@v0.1.1          # service binary
+go get github.com/thnhdatle/wake@v0.1.1                        # cache library and event types
 ```
 
 Prebuilt binaries for Linux and macOS are on the [releases page](https://github.com/thnhdatle/wake/releases).

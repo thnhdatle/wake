@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-25
+
+### Added
+
+- Interactive demo page in `docs/demo`.
+
+### Removed
+
+- Acceptance, benchmark and mutation-testing code and their Makefile targets; benchmark
+  results stay in the README.
+
 ## [0.1.0] - 2026-10-21
 
 First public release.
@@ -53,5 +64,6 @@ First public release.
 - Features not in v0.1 (for example outbox mode, Avro and Protobuf encodings, multiple slots
   and high availability) are listed in [ROADMAP.md](https://github.com/thnhdatle/wake/blob/main/ROADMAP.md).
 
-[Unreleased]: https://github.com/thnhdatle/wake/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/thnhdatle/wake/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/thnhdatle/wake/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/thnhdatle/wake/releases/tag/v0.1.0
