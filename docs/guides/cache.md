@@ -14,6 +14,13 @@ Cache rows in Go with `pkg/cache` (L1 plus Redis) and invalidate them from Wake'
 
 ## Quick start
 
+```go
+import (
+  "github.com/thnhdatle/wake/pkg/cache"
+  "github.com/thnhdatle/wake/pkg/cache/cdcsource" // invalidation from change events
+)
+```
+
 L1 only (one process):
 
 ```go
