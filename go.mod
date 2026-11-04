@@ -11,10 +11,10 @@ tool (
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/jackc/pglogrepl v0.0.0-20261003132456-662581bb6bb6
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jackc/pgx/v5 v5.12.0
 	github.com/klauspost/compress v1.20.3
-	github.com/moby/moby/api v1.55.0
-	github.com/nats-io/nats.go v1.54.0
+	github.com/moby/moby/api v1.56.1
+	github.com/nats-io/nats.go v1.55.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/prometheus/client_golang v1.25.0
@@ -28,7 +28,7 @@ require (
 	github.com/twmb/franz-go/pkg/kadm v1.19.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	go.uber.org/goleak v1.3.0
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/sync v0.24.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
